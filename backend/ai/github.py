@@ -1,0 +1,601 @@
+
+from urllib.parse import urlparse
+import base64
+
+import requests
+
+
+GITHUB_API = "https://api.github.com"
+
+
+# ============================================================
+# GitHub Username
+# ============================================================
+
+def extract_github_username(github_url: str) -> str:
+    if not github_url:
+        return ""
+
+    if not github_url.startswith(("http://", "https://")):
+        github_url = "https://" + github_url
+
+    parsed = urlparse(github_url)
+    path = parsed.path.strip("/")
+
+    if not path:
+        return ""
+
+    return path.split("/")[0]
+
+
+# ============================================================
+# GitHub API Helper
+# ============================================================
+
+def github_get(url: str, params: dict | None = None):
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=10,
+            headers={
+                "Accept": "application/vnd.github+json"
+            },
+        )
+
+        if response.status_code == 200:
+            return response.json()
+
+    except requests.RequestException:
+        pass
+
+    return None
+
+
+# ============================================================
+# Get File Content
+# ============================================================
+
+def get_file_content(
+    owner: str,
+    repo_name: str,
+    file_path: str,
+) -> str:
+    """
+    Download and decode a text file
+    from a GitHub repository.
+    """
+
+    url = (
+        f"{GITHUB_API}/repos/"
+        f"{owner}/{repo_name}/contents/{file_path}"
+    )
+
+    data = github_get(url)
+
+    if not data:
+        return ""
+
+    encoded_content = data.get("content")
+
+    if not encoded_content:
+        return ""
+
+    try:
+        return base64.b64decode(
+            encoded_content
+        ).decode(
+            "utf-8",
+            errors="ignore",
+        )
+
+    except Exception:
+        return ""
+
+
+# ============================================================
+# Dependency Detection
+# ============================================================
+
+def detect_dependencies(
+    owner: str,
+    repo_name: str,
+    files: list[str],
+) -> dict:
+    """
+    Inspect common dependency/configuration files
+    and identify technologies actually used.
+    """
+
+    technologies = []
+    dependency_files = {}
+
+    normalized_files = {
+        file.lower(): file
+        for file in files
+    }
+
+    # --------------------------------------------------------
+    # requirements.txt
+    # --------------------------------------------------------
+
+    requirements_file = normalized_files.get(
+        "requirements.txt"
+    )
+
+    if requirements_file:
+
+        content = get_file_content(
+            owner,
+            repo_name,
+            requirements_file,
+        )
+
+        dependency_files["requirements.txt"] = bool(
+            content
+        )
+
+        content_lower = content.lower()
+
+        python_dependencies = {
+            "FastAPI": "fastapi",
+            "Flask": "flask",
+            "Django": "django",
+            "SQLAlchemy": "sqlalchemy",
+            "OpenCV": "opencv",
+            "Pandas": "pandas",
+            "NumPy": "numpy",
+            "PyTorch": "torch",
+            "TensorFlow": "tensorflow",
+            "Scikit-learn": "scikit-learn",
+            "Requests": "requests",
+            "Pygame": "pygame",
+        }
+
+        for technology, package in python_dependencies.items():
+
+            if package in content_lower:
+                technologies.append(technology)
+
+    # --------------------------------------------------------
+    # package.json
+    # --------------------------------------------------------
+
+    package_file = normalized_files.get(
+        "package.json"
+    )
+
+    if package_file:
+
+        content = get_file_content(
+            owner,
+            repo_name,
+            package_file,
+        )
+
+        dependency_files["package.json"] = bool(
+            content
+        )
+
+        content_lower = content.lower()
+
+        javascript_dependencies = {
+            "React": '"react"',
+            "React Router": '"react-router',
+            "Redux": '"redux"',
+            "Express.js": '"express"',
+            "Axios": '"axios"',
+            "Vite": '"vite"',
+            "Next.js": '"next"',
+            "Tailwind CSS": '"tailwindcss"',
+        }
+
+        for technology, package in javascript_dependencies.items():
+
+            if package in content_lower:
+                technologies.append(technology)
+
+    # --------------------------------------------------------
+    # Dockerfile
+    # --------------------------------------------------------
+
+    dockerfile = normalized_files.get(
+        "dockerfile"
+    )
+
+    if dockerfile:
+
+        dependency_files["Dockerfile"] = True
+        technologies.append("Docker")
+
+    # --------------------------------------------------------
+    # pyproject.toml
+    # --------------------------------------------------------
+
+    pyproject = normalized_files.get(
+        "pyproject.toml"
+    )
+
+    if pyproject:
+
+        content = get_file_content(
+            owner,
+            repo_name,
+            pyproject,
+        )
+
+        dependency_files["pyproject.toml"] = bool(
+            content
+        )
+
+        content_lower = content.lower()
+
+        pyproject_dependencies = {
+            "FastAPI": "fastapi",
+            "Flask": "flask",
+            "Django": "django",
+            "Pandas": "pandas",
+            "NumPy": "numpy",
+            "SQLAlchemy": "sqlalchemy",
+        }
+
+        for technology, package in pyproject_dependencies.items():
+
+            if package in content_lower:
+                technologies.append(technology)
+
+    return {
+        "technologies": list(
+            dict.fromkeys(technologies)
+        ),
+        "dependency_files": dependency_files,
+    }
+
+
+# ============================================================
+# Repository Analysis
+# ============================================================
+
+def analyze_repository(
+    username: str,
+    repository: dict,
+) -> dict:
+
+    repo_name = repository.get(
+        "name",
+        "",
+    )
+
+    owner = repository.get(
+        "owner",
+        {},
+    ).get(
+        "login",
+        username,
+    )
+
+    language = repository.get(
+        "language"
+    )
+
+    description = repository.get(
+        "description"
+    )
+
+    stars = repository.get(
+        "stargazers_count",
+        0,
+    )
+
+    forks = repository.get(
+        "forks_count",
+        0,
+    )
+
+    updated_at = repository.get(
+        "updated_at"
+    )
+
+    # --------------------------------------------------------
+    # Languages
+    # --------------------------------------------------------
+
+    languages_url = repository.get(
+        "languages_url"
+    )
+
+    languages = {}
+
+    if languages_url:
+
+        language_data = github_get(
+            languages_url
+        )
+
+        if isinstance(
+            language_data,
+            dict,
+        ):
+            languages = language_data
+
+    # --------------------------------------------------------
+    # README
+    # --------------------------------------------------------
+
+    readme_url = (
+        f"{GITHUB_API}/repos/"
+        f"{owner}/{repo_name}/readme"
+    )
+
+    readme_data = github_get(
+        readme_url
+    )
+
+    has_readme = bool(
+        readme_data
+    )
+
+    # --------------------------------------------------------
+    # Repository Contents
+    # --------------------------------------------------------
+
+    contents_url = (
+        f"{GITHUB_API}/repos/"
+        f"{owner}/{repo_name}/contents"
+    )
+
+    contents = github_get(
+        contents_url
+    )
+
+    files = []
+
+    if isinstance(
+        contents,
+        list,
+    ):
+
+        files = [
+            item.get("name", "")
+            for item in contents
+            if item.get("name")
+        ]
+
+    # --------------------------------------------------------
+    # Basic Technology Detection
+    # --------------------------------------------------------
+
+    searchable_text = " ".join(
+        [
+            repo_name,
+            description or "",
+            language or "",
+            " ".join(languages.keys()),
+            " ".join(files),
+        ]
+    ).lower()
+
+    technologies = []
+
+    technology_patterns = {
+        "Python": [
+            "python",
+            ".py",
+        ],
+        "JavaScript": [
+            "javascript",
+            ".js",
+        ],
+        "TypeScript": [
+            "typescript",
+            ".ts",
+        ],
+        "React": [
+            "react",
+            ".jsx",
+            ".tsx",
+        ],
+        "Node.js": [
+            "node",
+        ],
+        "SQL": [
+            "sql",
+            "mysql",
+            "postgresql",
+            "sqlite",
+        ],
+        "MongoDB": [
+            "mongodb",
+            "mongoose",
+        ],
+        "AI": [
+            "artificial intelligence",
+            "machine learning",
+            "deep learning",
+            "ai",
+        ],
+    }
+
+    for technology, patterns in technology_patterns.items():
+
+        for pattern in patterns:
+
+            if pattern.lower() in searchable_text:
+                technologies.append(technology)
+                break
+
+    # --------------------------------------------------------
+    # Dependency Detection
+    # --------------------------------------------------------
+
+    dependency_result = detect_dependencies(
+        owner,
+        repo_name,
+        files,
+    )
+
+    technologies.extend(
+        dependency_result["technologies"]
+    )
+
+    technologies = list(
+        dict.fromkeys(technologies)
+    )
+
+    # --------------------------------------------------------
+    # Return Repository Evidence
+    # --------------------------------------------------------
+
+    return {
+        "name": repo_name,
+        "description": description,
+        "language": language,
+        "languages": languages,
+        "technologies": technologies,
+        "dependency_files": dependency_result[
+            "dependency_files"
+        ],
+        "files": files,
+        "has_readme": has_readme,
+        "stars": stars,
+        "forks": forks,
+        "updated_at": updated_at,
+    }
+
+
+# ============================================================
+# Main GitHub Analyzer
+# ============================================================
+
+def analyze_github(
+    github_url: str,
+) -> dict:
+    """
+    Analyze a public GitHub profile and collect
+    repository-level technology evidence.
+    """
+
+    username = extract_github_username(
+        github_url
+    )
+
+    # --------------------------------------------------------
+    # Missing URL
+    # --------------------------------------------------------
+
+    if not username:
+
+        return {
+            "username": "",
+            "profile_found": False,
+            "repository_count": 0,
+            "repositories": [],
+            "technology_evidence": [],
+            "evidence_status": "missing",
+        }
+
+    # --------------------------------------------------------
+    # Profile
+    # --------------------------------------------------------
+
+    profile_url = (
+        f"{GITHUB_API}/users/{username}"
+    )
+
+    profile = github_get(
+        profile_url
+    )
+
+    if not profile:
+
+        return {
+            "username": username,
+            "profile_found": False,
+            "repository_count": 0,
+            "repositories": [],
+            "technology_evidence": [],
+            "evidence_status": "not_found",
+        }
+
+    # --------------------------------------------------------
+    # Repositories
+    # --------------------------------------------------------
+
+    repos_url = (
+        f"{GITHUB_API}/users/"
+        f"{username}/repos"
+    )
+
+    repositories = github_get(
+        repos_url,
+        params={
+            "per_page": 10,
+            "sort": "updated",
+        },
+    )
+
+    if not isinstance(
+        repositories,
+        list,
+    ):
+        repositories = []
+
+    analyzed_repositories = []
+
+    for repository in repositories:
+
+        analyzed = analyze_repository(
+            username,
+            repository,
+        )
+
+        analyzed_repositories.append(
+            analyzed
+        )
+
+    # --------------------------------------------------------
+    # Technology Evidence
+    # --------------------------------------------------------
+
+    technology_evidence = []
+
+    for repository in analyzed_repositories:
+
+        for technology in repository.get(
+            "technologies",
+            [],
+        ):
+
+            if technology not in technology_evidence:
+                technology_evidence.append(
+                    technology
+                )
+
+    # --------------------------------------------------------
+    # Final Result
+    # --------------------------------------------------------
+
+    return {
+        "username": username,
+        "profile_found": True,
+        "display_name": profile.get(
+            "name"
+        ),
+        "bio": profile.get(
+            "bio"
+        ),
+        "public_repositories": profile.get(
+            "public_repos",
+            0,
+        ),
+        "repository_count": len(
+            analyzed_repositories
+        ),
+        "repositories": analyzed_repositories,
+        "technology_evidence": technology_evidence,
+        "evidence_status": (
+            "found"
+            if analyzed_repositories
+            else "no_repositories"
+        ),
+    }
