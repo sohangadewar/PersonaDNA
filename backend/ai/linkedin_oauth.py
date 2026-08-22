@@ -44,10 +44,10 @@ LINKEDIN_API_URL = (
 # Development/Lite:
 # r_profile_basicinfo + r_verify
 LINKEDIN_SCOPES = [
-    "r_profile_basicinfo",
-    "r_verify",
+    "openid",
+    "profile",
+    "email",
 ]
-
 
 # ============================================================
 # Temporary OAuth state storage
