@@ -59,8 +59,9 @@ from ai.linkedin_oauth import (
     validate_oauth_state,
     exchange_code_for_token,
     fetch_authorized_linkedin_data,
+    create_oauth_result,
+    consume_oauth_result,
 )
-
 
 from dotenv import load_dotenv
 
@@ -518,8 +519,6 @@ async def analyze(
 
 @app.get("/linkedin/connect")
 def linkedin_connect():
-   
-  
 
     try:
         authorization_url, _ = (
@@ -603,18 +602,20 @@ def linkedin_callback(
         # DEVELOPMENT ONLY:
         # Do not expose the access token in the
         # production response.
-        return {
-            "message": (
-                "LinkedIn authorization successful."
-            ),
-            "linkedin": linkedin_data,
-            "expires_in": token_data.get(
-                "expires_in"
-            ),
-            "scope": token_data.get(
-                "scope"
-            ),
-        }
+        result_code = create_oauth_result(
+            linkedin_data
+        )
+
+        frontend_url = (
+            "https://personadna-1.onrender.com"
+        )
+
+        return RedirectResponse(
+            url=(
+                f"{frontend_url}"
+                f"?linkedin_result={result_code}"
+            )
+        )
 
     except Exception as exc:
 
@@ -622,3 +623,30 @@ def linkedin_callback(
             status_code=500,
             detail=str(exc),
         ) from exc
+@app.get("/linkedin/result")
+def linkedin_result(
+    code: str = "",
+):
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="LinkedIn result code is missing.",
+        )
+
+    linkedin_data = consume_oauth_result(
+        code
+    )
+
+    if not linkedin_data:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "LinkedIn result is invalid "
+                "or has already been used."
+            ),
+        )
+
+    return {
+    "https://personadna-1.onrender.com?linkedin_result=": code,
+    "linkedin": linkedin_data,
+}

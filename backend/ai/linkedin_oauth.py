@@ -57,7 +57,7 @@ LINKEDIN_SCOPES = [
 # This in-memory store is acceptable for local development only.
 # For production, store state server-side in a session/database.
 OAUTH_STATES = set()
-
+OAUTH_RESULTS = {}
 
 def generate_oauth_state() -> str:
     """
@@ -88,6 +88,38 @@ def validate_oauth_state(
     )
 
     return True
+
+
+def create_oauth_result(
+    linkedin_data: dict,
+) -> str:
+    """
+    Create a one-time code for handing LinkedIn
+    profile data from the backend to the frontend.
+    """
+
+    result_code = secrets.token_urlsafe(32)
+
+    OAUTH_RESULTS[result_code] = linkedin_data
+
+    return result_code
+
+
+def consume_oauth_result(
+    result_code: str,
+) -> dict | None:
+    """
+    Retrieve and immediately delete a one-time
+    LinkedIn OAuth result.
+    """
+
+    if not result_code:
+        return None
+
+    return OAUTH_RESULTS.pop(
+        result_code,
+        None,
+    )
 
 
 # ============================================================
