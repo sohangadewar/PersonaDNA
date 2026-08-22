@@ -167,7 +167,6 @@ async def analyze(
     linkedin: str = Form(""),
     linkedin_profile: str = Form(""),
 ):
-    
 
     # ==================================================
     # LINKEDIN AUTHORIZED DATA
@@ -271,13 +270,63 @@ async def analyze(
     # IDENTITY VERIFICATION
     # ==================================================
 
+    linkedin_identity_name = ""
+
+    # Prefer authorized LinkedIn profile name.
+    if isinstance(linkedin_profile_data, dict):
+        linkedin_identity_name = str(
+            linkedin_profile_data.get(
+                "name",
+                "",
+            )
+        ).strip()
+
+    # Also support the normalized LinkedIn evidence.
+    if not linkedin_identity_name:
+        linkedin_identity_name = str(
+            linkedin_evidence.get(
+                "display_name",
+                "",
+            )
+        ).strip()
+
+    # IMPORTANT:
+    # Do NOT use the LinkedIn URL as the person's name.
+    # A URL is not identity evidence.
+
     identity = compare_identity(
-        resume_name,
-        github,
-        linkedin,
+        resume_name=resume_name,
+        github=github,
+        linkedin=linkedin_identity_name,
+        github_display_name=github_evidence.get(
+            "display_name",
+            "",
+        ),
+    )
+
+    print("\n========== IDENTITY DEBUG ==========")
+    print("Resume name:", resume_name)
+    print(
+        "GitHub name:",
         github_evidence.get(
             "display_name",
             "",
+        ),
+    )
+    print(
+        "LinkedIn name:",
+        linkedin_identity_name,
+    )
+    print(
+        "GitHub match:",
+        identity.get(
+            "github_match"
+        ),
+    )
+    print(
+        "LinkedIn match:",
+        identity.get(
+            "linkedin_match"
         ),
     )
 

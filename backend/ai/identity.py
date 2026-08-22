@@ -102,24 +102,24 @@ def compare_identity(
     github_display_name: str = "",
 ) -> dict:
     """
-    Compare the identity found in the resume with GitHub
-    and LinkedIn identity information.
+    Compare resume identity with authorized external
+    profile names.
 
     Name order does not matter.
 
     Example:
-        Resume:   GADEWAR SOHAN
-        LinkedIn: Sohan Gadewar
+        GADEWAR SOHAN
+        Sohan Gadewar
 
-    Result:
-        linkedin_match = True
+    Both normalize to:
+        gadewar sohan
     """
 
     resume_normalized = normalize_name(
         resume_name
     )
 
-    github_display_normalized = normalize_name(
+    github_normalized = normalize_name(
         github_display_name
     )
 
@@ -127,24 +127,24 @@ def compare_identity(
         linkedin
     )
 
-    # --------------------------------------------------------
-    # GitHub
-    # --------------------------------------------------------
+    # ==================================================
+    # GITHUB IDENTITY
+    # ==================================================
 
     github_match = False
 
     if (
         resume_normalized
-        and github_display_normalized
+        and github_normalized
     ):
         github_match = (
             resume_normalized
-            == github_display_normalized
+            == github_normalized
         )
 
-    # --------------------------------------------------------
-    # LinkedIn
-    # --------------------------------------------------------
+    # ==================================================
+    # LINKEDIN IDENTITY
+    # ==================================================
 
     linkedin_match = False
 
@@ -157,37 +157,48 @@ def compare_identity(
             == linkedin_normalized
         )
 
-    # --------------------------------------------------------
-    # Scores
-    # --------------------------------------------------------
+    # ==================================================
+    # SCORES
+    # ==================================================
 
-    github_username_score = 0
-    linkedin_username_score = 0
+    github_username_score = (
+        100 if github_match else 0
+    )
 
-    if github_match:
-        github_username_score = 100
-
-    if linkedin_match:
-        linkedin_username_score = 100
-
-    # --------------------------------------------------------
-    # Return identity report
-    # --------------------------------------------------------
+    linkedin_username_score = (
+        100 if linkedin_match else 0
+    )
 
     return {
         "resume_name": resume_name,
+
         "github_username": github,
+
         "linkedin_username": linkedin,
 
         "github_display_name": github_display_name,
 
         "github_match": github_match,
+
         "linkedin_match": linkedin_match,
 
-        "github_username_score": github_username_score,
-        "linkedin_username_score": linkedin_username_score,
+        "github_username_score": (
+            github_username_score
+        ),
 
-        "resume_normalized": resume_normalized,
-        "github_normalized": github_display_normalized,
-        "linkedin_normalized": linkedin_normalized,
+        "linkedin_username_score": (
+            linkedin_username_score
+        ),
+
+        "resume_normalized": (
+            resume_normalized
+        ),
+
+        "github_normalized": (
+            github_normalized
+        ),
+
+        "linkedin_normalized": (
+            linkedin_normalized
+        ),
     }
