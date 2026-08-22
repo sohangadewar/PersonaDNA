@@ -17,6 +17,8 @@ interface LinkedInProfile {
   name?: string;
   email?: string;
   profile_picture?: string;
+  profile_url?: string;
+  verification_categories?: string[];
 }
 
 interface UploadSectionProps {
@@ -113,6 +115,8 @@ export default function UploadSection({
   // LINKEDIN CONNECT
   // ============================================================
 
+  
+
   const connectLinkedIn = () => {
     window.location.href =
       "https://personadna.onrender.com/linkedin/connect";
@@ -122,78 +126,87 @@ export default function UploadSection({
   // GENERATE DIGITAL DNA
   // ============================================================
 
-  const handleGenerate = async () => {
-    if (!resumeFile) {
-      alert(
-        "Please upload a resume before generating."
-      );
-      return;
-    }
+const handleGenerate = async () => {
+  if (!resumeFile) {
+    alert(
+      "Please upload a resume before generating."
+    );
+    return;
+  }
 
-    if (!github.trim()) {
-      alert(
-        "Please enter your GitHub profile URL."
-      );
-      return;
-    }
+  if (!github.trim()) {
+    alert(
+      "Please enter your GitHub profile URL."
+    );
+    return;
+  }
 
-    if (!linkedinProfile) {
-      alert(
-        "Please connect your LinkedIn profile first."
-      );
-      return;
-    }
+  if (!linkedinProfile) {
+    alert(
+      "Please connect your LinkedIn profile first."
+    );
+    return;
+  }
 
-    try {
-      setIsGenerating(true);
+  try {
+    setIsGenerating(true);
 
-      const formData = new FormData();
+    const formData = new FormData();
 
-      formData.append(
-        "resume",
-        resumeFile
-      );
+    formData.append(
+      "resume",
+      resumeFile
+    );
 
-      formData.append(
-        "github",
-        github
-      );
+    formData.append(
+      "github",
+      github.trim()
+    );
 
-      if (linkedinProfile.name) {
-        formData.append(
-          "linkedin",
-          linkedinProfile.name
-        );
-      }
+    // Send the complete authorized LinkedIn profile
+    formData.append(
+      "linkedin_profile",
+      JSON.stringify(linkedinProfile)
+    );
 
-      const response =
-        await api.post<CandidateReport>(
-          "/analyze",
-          formData
-        );
+    // Send LinkedIn URL if available
+    formData.append(
+      "linkedin",
+      linkedinProfile.profile_url || ""
+    );
 
-      console.log(
-        "PersonaDNA Backend Response:",
-        response.data
-      );
+    console.log(
+      "Sending LinkedIn profile:",
+      linkedinProfile
+    );
 
-      onGenerate(response.data);
-
-    } catch (error) {
-      console.error(
-        "PersonaDNA analysis failed:",
-        error
+    const response =
+      await api.post<CandidateReport>(
+        "/analyze",
+        formData
       );
 
-      alert(
-        "Unable to analyze your profile. Please make sure the PersonaDNA backend is running."
-      );
+    console.log(
+      "PersonaDNA Backend Response:",
+      response.data
+    );
 
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+    onGenerate(response.data);
 
+  } catch (error) {
+    console.error(
+      "PersonaDNA analysis failed:",
+      error
+    );
+
+    alert(
+      "Unable to analyze your profile. Please make sure the PersonaDNA backend is running."
+    );
+
+  } finally {
+    setIsGenerating(false);
+  }
+};
   // ============================================================
   // UI
   // ============================================================

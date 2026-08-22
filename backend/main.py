@@ -1,24 +1,3 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI(title="PersonaDNA API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://personadna-1.onrender.com",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-
-
-
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from io import BytesIO
+import json
 
 from pypdf import PdfReader
 
@@ -74,21 +54,20 @@ from ai.linkedin_oauth import (
 )
 
 
-# ==================================================
-# CORS
-# ==================================================
+app = FastAPI(title="PersonaDNA API")
+
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://personadna-1.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ==================================================
 # COMMON SKILLS
@@ -186,13 +165,29 @@ async def analyze(
     resume: UploadFile = File(...),
     github: str = Form(""),
     linkedin: str = Form(""),
+    linkedin_profile: str = Form(""),
 ):
+    
+
+    # ==================================================
+    # LINKEDIN AUTHORIZED DATA
+    # ==================================================
+
+    linkedin_profile_data = None
+
+    if linkedin_profile:
+        try:
+            linkedin_profile_data = json.loads(
+                linkedin_profile
+            )
+        except json.JSONDecodeError:
+            linkedin_profile_data = None
 
     linkedin_evidence = analyze_linkedin_evidence(
-    linkedin_url=linkedin,
-    profile_data=None,
-    consent_granted=False,
-)
+        linkedin_url=linkedin,
+        profile_data=linkedin_profile_data,
+        consent_granted=bool(linkedin_profile_data),
+    )
 
     print("========== ANALYZE STARTED ==========")
 
@@ -393,14 +388,32 @@ async def analyze(
     # AI CONFIDENCE
     # ==================================================
 
-    ai_confidence = (
-        calculate_confidence(
-            resume_text,
-            claims,
-            github_evidence,
-            linkedin,
-        )
+    ai_confidence = calculate_confidence(
+        resume_text,
+        claims,
+        github_evidence,
+        linkedin,
     )
+
+    if isinstance(ai_confidence, list):
+        ai_confidence = (
+            ai_confidence[0]
+            if ai_confidence
+            else 0
+        )
+
+    if isinstance(ai_confidence, dict):
+        ai_confidence = ai_confidence.get(
+            "score",
+            0,
+        )
+
+    try:
+        ai_confidence = int(
+            float(ai_confidence)
+        )
+    except (TypeError, ValueError):
+        ai_confidence = 0
 
     # ==================================================
     # STRENGTHS

@@ -609,6 +609,10 @@ def build_linkedin_summary(
 
     return {
         "status": status,
+        
+        
+        
+        
         "authorized": bool(
             linkedin_evidence.get(
                 "authorized_source",

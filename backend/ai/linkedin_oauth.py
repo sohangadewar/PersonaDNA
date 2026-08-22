@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 
 import requests
 
-
 # ============================================================
 # Configuration
 # ============================================================
@@ -29,17 +28,11 @@ LINKEDIN_VERSION = os.getenv(
     "202510",
 )
 
-LINKEDIN_AUTH_URL = (
-    "https://www.linkedin.com/oauth/v2/authorization"
-)
+LINKEDIN_AUTH_URL = "https://www.linkedin.com/oauth/v2/authorization"
 
-LINKEDIN_TOKEN_URL = (
-    "https://www.linkedin.com/oauth/v2/accessToken"
-)
+LINKEDIN_TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken"
 
-LINKEDIN_API_URL = (
-    "https://api.linkedin.com/rest"
-)
+LINKEDIN_API_URL = "https://api.linkedin.com/rest"
 
 # Development/Lite:
 # r_profile_basicinfo + r_verify
@@ -59,6 +52,7 @@ LINKEDIN_SCOPES = [
 OAUTH_STATES = set()
 OAUTH_RESULTS = {}
 
+
 def generate_oauth_state() -> str:
     """
     Generate a random CSRF protection state.
@@ -66,9 +60,7 @@ def generate_oauth_state() -> str:
 
     state = secrets.token_urlsafe(32)
 
-    OAUTH_STATES.add(
-        state
-    )
+    OAUTH_STATES.add(state)
 
     return state
 
@@ -83,9 +75,7 @@ def validate_oauth_state(
     if state not in OAUTH_STATES:
         return False
 
-    OAUTH_STATES.remove(
-        state
-    )
+    OAUTH_STATES.remove(state)
 
     return True
 
@@ -126,6 +116,7 @@ def consume_oauth_result(
 # Authorization URL
 # ============================================================
 
+
 def build_linkedin_authorization_url() -> tuple[str, str]:
     """
     Build LinkedIn OAuth authorization URL.
@@ -136,9 +127,7 @@ def build_linkedin_authorization_url() -> tuple[str, str]:
     """
 
     if not LINKEDIN_CLIENT_ID:
-        raise RuntimeError(
-            "LINKEDIN_CLIENT_ID is not configured."
-        )
+        raise RuntimeError("LINKEDIN_CLIENT_ID is not configured.")
 
     state = generate_oauth_state()
 
@@ -147,15 +136,10 @@ def build_linkedin_authorization_url() -> tuple[str, str]:
         "client_id": LINKEDIN_CLIENT_ID,
         "redirect_uri": LINKEDIN_REDIRECT_URI,
         "state": state,
-        "scope": " ".join(
-            LINKEDIN_SCOPES
-        ),
+        "scope": " ".join(LINKEDIN_SCOPES),
     }
 
-    authorization_url = (
-        f"{LINKEDIN_AUTH_URL}?"
-        f"{urlencode(params)}"
-    )
+    authorization_url = f"{LINKEDIN_AUTH_URL}?" f"{urlencode(params)}"
 
     return (
         authorization_url,
@@ -167,24 +151,19 @@ def build_linkedin_authorization_url() -> tuple[str, str]:
 # Authorization code → access token
 # ============================================================
 
+
 def exchange_code_for_token(
     code: str,
 ) -> dict:
 
     if not code:
-        raise ValueError(
-            "Authorization code is missing."
-        )
+        raise ValueError("Authorization code is missing.")
 
     if not LINKEDIN_CLIENT_ID:
-        raise RuntimeError(
-            "LINKEDIN_CLIENT_ID is not configured."
-        )
+        raise RuntimeError("LINKEDIN_CLIENT_ID is not configured.")
 
     if not LINKEDIN_CLIENT_SECRET:
-        raise RuntimeError(
-            "LINKEDIN_CLIENT_SECRET is not configured."
-        )
+        raise RuntimeError("LINKEDIN_CLIENT_SECRET is not configured.")
 
     response = requests.post(
         LINKEDIN_TOKEN_URL,
@@ -196,9 +175,7 @@ def exchange_code_for_token(
             "client_secret": LINKEDIN_CLIENT_SECRET,
         },
         headers={
-            "Content-Type": (
-                "application/x-www-form-urlencoded"
-            ),
+            "Content-Type": ("application/x-www-form-urlencoded"),
         },
         timeout=15,
     )
@@ -218,28 +195,21 @@ def exchange_code_for_token(
 # Generic LinkedIn API GET
 # ============================================================
 
+
 def linkedin_get(
     endpoint: str,
     access_token: str,
 ) -> dict:
 
     if not access_token:
-        raise ValueError(
-            "LinkedIn access token is missing."
-        )
+        raise ValueError("LinkedIn access token is missing.")
 
     response = requests.get(
         f"{LINKEDIN_API_URL}{endpoint}",
         headers={
-            "Authorization": (
-                f"Bearer {access_token}"
-            ),
-            "LinkedIn-Version": (
-                LINKEDIN_VERSION
-            ),
-            "X-Restli-Protocol-Version": (
-                "2.0.0"
-            ),
+            "Authorization": (f"Bearer {access_token}"),
+            "LinkedIn-Version": (LINKEDIN_VERSION),
+            "X-Restli-Protocol-Version": ("2.0.0"),
         },
         timeout=15,
     )
@@ -258,6 +228,7 @@ def linkedin_get(
 # ============================================================
 # Extract localized LinkedIn text
 # ============================================================
+
 
 def extract_localized_value(
     field: dict | None,
@@ -283,19 +254,13 @@ def extract_localized_value(
     if not localized:
         return ""
 
-    return str(
-        next(
-            iter(
-                localized.values()
-            )
-        )
-    )
-
+    return str(next(iter(localized.values())))
 
 
 # ============================================================
 # LinkedIn OpenID Connect UserInfo
 # ============================================================
+
 
 def fetch_linkedin_identity(
     access_token: str,
@@ -322,17 +287,18 @@ def fetch_linkedin_identity(
 # Verification data
 # ============================================================
 
+
 def fetch_linkedin_verification(
     access_token: str,
 ) -> dict:
 
-   
-
     return {}
+
 
 # ============================================================
 # Normalize LinkedIn API response
 # ============================================================
+
 
 def build_linkedin_profile_data(
     identity_data: dict,
@@ -364,11 +330,9 @@ def build_linkedin_profile_data(
             if value
         ).strip()
 
-    verification_categories = (
-        verification_data.get(
-            "verifications",
-            [],
-        )
+    verification_categories = verification_data.get(
+        "verifications",
+        [],
     )
 
     if not isinstance(
@@ -382,32 +346,23 @@ def build_linkedin_profile_data(
             "sub",
             "",
         ),
-
         "first_name": first_name,
-
         "last_name": last_name,
-
         "name": display_name,
-
         "email": identity_data.get(
             "email",
             "",
         ),
-
-        "profile_url": "",
-
+        "profile_url": identity_data.get(
+            "profile_url",
+            "",
+        ),
         "profile_picture": identity_data.get(
             "picture",
             "",
         ),
-
-        "verification_categories": (
-            verification_categories
-        ),
-
-        "verification_report": (
-            verification_data
-        ),
+        "verification_categories": (verification_categories),
+        "verification_report": (verification_data),
     }
 
 
@@ -415,25 +370,18 @@ def build_linkedin_profile_data(
 # Complete authorized LinkedIn analysis
 # ============================================================
 
+
 def fetch_authorized_linkedin_data(
     access_token: str,
 ) -> dict:
 
-    identity_data = fetch_linkedin_identity(
-        access_token
-    )
+    identity_data = fetch_linkedin_identity(access_token)
 
-    verification_data = (
-        fetch_linkedin_verification(
-            access_token
-        )
-    )
+    verification_data = fetch_linkedin_verification(access_token)
 
-    profile_data = (
-        build_linkedin_profile_data(
-            identity_data,
-            verification_data,
-        )
+    profile_data = build_linkedin_profile_data(
+        identity_data,
+        verification_data,
     )
 
     return profile_data
