@@ -15,7 +15,12 @@ function App() {
     "landing" | "processing" | "dashboard"
   >("landing");
 
-  const [report, setReport] = useState<CandidateReport | null>(null);
+  const [report, setReport] =
+    useState<CandidateReport | null>(null);
+
+  // ============================================================
+  // PROCESSING SCREEN
+  // ============================================================
 
   if (screen === "processing") {
     return (
@@ -27,9 +32,17 @@ function App() {
     );
   }
 
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
+
   if (screen === "dashboard" && report) {
     return <Dashboard report={report} />;
   }
+
+  // ============================================================
+  // LANDING PAGE
+  // ============================================================
 
   return (
     <div className="min-h-screen bg-[#09090B]">
@@ -43,9 +56,13 @@ function App() {
 
       <UploadSection
         onGenerate={(data: CandidateReport) => {
-          console.log("PersonaDNA Report:", data);
+          console.log(
+            "PersonaDNA Report:",
+            data
+          );
 
           setReport(data);
+
           setScreen("processing");
         }}
       />
