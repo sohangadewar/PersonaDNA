@@ -5,7 +5,9 @@ app = FastAPI(title="PersonaDNA API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "https://personadna-1.onrender.com",
     ],
     allow_credentials=True,
@@ -17,15 +19,24 @@ app.add_middleware(
 
 
 
-from io import BytesIO
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+
+from io import BytesIO
+
 from pypdf import PdfReader
+
 from ai.claims import extract_claims
 from ai.identity import extract_resume_name, compare_identity
 from ai.scoring import calculate_trust_score
 from ai.github import analyze_github
 from ai.confidence import calculate_confidence
+
 from ai.evidence import (
     build_evidence_report,
     enrich_claims_with_github,
@@ -38,21 +49,20 @@ from ai.linkedin import (
     build_linkedin_summary,
 )
 
-
-
 from ai.risk_engine import (
     build_risk_report,
     calculate_risk_summary,
 )
+
 from ai.skill_mapping import build_skill_repository_mapping
+
 from ai.candidate_intelligence import (
     build_candidate_intelligence,
 )
+
 from ai.project_matching import (
     build_project_repository_mapping,
 )
-
-from fastapi.responses import RedirectResponse
 
 from ai.linkedin_oauth import (
     build_linkedin_authorization_url,
@@ -63,9 +73,7 @@ from ai.linkedin_oauth import (
     consume_oauth_result,
 )
 
-from dotenv import load_dotenv
 
-load_dotenv()
 # ==================================================
 # CORS
 # ==================================================
@@ -647,6 +655,6 @@ def linkedin_result(
         )
 
     return {
-    "https://personadna-1.onrender.com?linkedin_result=": code,
-    "linkedin": linkedin_data,
-}
+        "code": code,
+        "linkedin": linkedin_data,
+    }

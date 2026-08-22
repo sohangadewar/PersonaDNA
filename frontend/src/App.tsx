@@ -18,10 +18,6 @@ function App() {
   const [report, setReport] =
     useState<CandidateReport | null>(null);
 
-  // ============================================================
-  // PROCESSING SCREEN
-  // ============================================================
-
   if (screen === "processing") {
     return (
       <ProcessingScreen
@@ -32,17 +28,9 @@ function App() {
     );
   }
 
-  // ============================================================
-  // DASHBOARD
-  // ============================================================
-
   if (screen === "dashboard" && report) {
     return <Dashboard report={report} />;
   }
-
-  // ============================================================
-  // LANDING PAGE
-  // ============================================================
 
   return (
     <div className="min-h-screen bg-[#09090B]">
@@ -62,7 +50,6 @@ function App() {
           );
 
           setReport(data);
-
           setScreen("processing");
         }}
       />

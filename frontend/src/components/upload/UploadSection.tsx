@@ -27,6 +27,7 @@ export default function UploadSection({
   onGenerate,
 }: UploadSectionProps) {
   const [github, setGithub] = useState("");
+
   const [linkedinProfile, setLinkedinProfile] =
     useState<LinkedInProfile | null>(null);
 
@@ -158,7 +159,6 @@ export default function UploadSection({
         github
       );
 
-      // Send LinkedIn name to backend
       if (linkedinProfile.name) {
         formData.append(
           "linkedin",
@@ -178,6 +178,7 @@ export default function UploadSection({
       );
 
       onGenerate(response.data);
+
     } catch (error) {
       console.error(
         "PersonaDNA analysis failed:",
@@ -187,6 +188,7 @@ export default function UploadSection({
       alert(
         "Unable to analyze your profile. Please make sure the PersonaDNA backend is running."
       );
+
     } finally {
       setIsGenerating(false);
     }
@@ -203,6 +205,8 @@ export default function UploadSection({
     >
       <div className="mx-auto max-w-5xl px-6">
 
+        {/* HEADER */}
+
         <div className="text-center">
 
           <p className="font-semibold uppercase tracking-widest text-blue-400">
@@ -214,17 +218,14 @@ export default function UploadSection({
           </h2>
 
           <p className="mt-6 text-gray-400">
-            Upload your resume and connect your
-            professional profiles.
+            Upload your resume and connect your professional profiles.
           </p>
 
         </div>
 
         <div className="mt-16 rounded-3xl border border-white/10 bg-white/5 p-10 backdrop-blur-xl">
 
-          {/* ================================================== */}
           {/* RESUME */}
-          {/* ================================================== */}
 
           <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-500/40 p-12 transition hover:border-blue-400 hover:bg-blue-500/10">
 
@@ -249,18 +250,13 @@ export default function UploadSection({
 
           </label>
 
-          {/* ================================================== */}
           {/* GITHUB */}
-          {/* ================================================== */}
 
           <div className="mt-10">
 
             <label className="mb-2 flex items-center gap-2 text-white">
-
               <Globe size={18} />
-
               GitHub Profile
-
             </label>
 
             <input
@@ -275,18 +271,13 @@ export default function UploadSection({
 
           </div>
 
-          {/* ================================================== */}
           {/* LINKEDIN */}
-          {/* ================================================== */}
 
           <div className="mt-8">
 
             <label className="mb-2 flex items-center gap-2 text-white">
-
               <User size={18} />
-
               LinkedIn Profile
-
             </label>
 
             {!linkedinProfile ? (
@@ -296,11 +287,8 @@ export default function UploadSection({
                 onClick={connectLinkedIn}
                 className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-500/40 bg-blue-600/10 p-4 font-semibold text-blue-400 transition hover:border-blue-400 hover:bg-blue-600/20"
               >
-
                 <User size={20} />
-
                 Connect with LinkedIn
-
               </button>
 
             ) : (
@@ -323,9 +311,7 @@ export default function UploadSection({
                 ) : (
 
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
-
                     <User className="text-green-400" />
-
                   </div>
 
                 )}
@@ -333,17 +319,13 @@ export default function UploadSection({
                 <div className="flex-1">
 
                   <p className="font-semibold text-white">
-
                     {linkedinProfile.name ||
                       "LinkedIn User"}
-
                   </p>
 
                   <p className="text-sm text-gray-400">
-
                     {linkedinProfile.email ||
                       "LinkedIn account connected"}
-
                   </p>
 
                 </div>
@@ -359,9 +341,7 @@ export default function UploadSection({
 
           </div>
 
-          {/* ================================================== */}
           {/* GENERATE */}
-          {/* ================================================== */}
 
           <button
             type="button"
@@ -379,7 +359,6 @@ export default function UploadSection({
           </button>
 
         </div>
-
       </div>
     </section>
   );
