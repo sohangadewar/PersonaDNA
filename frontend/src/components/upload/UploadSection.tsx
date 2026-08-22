@@ -1,4 +1,4 @@
-import { Upload, Globe, FileCheck, User } from "lucide-react";
+import { Upload, Globe, FileCheck, User, CheckCircle } from "lucide-react";
 import { useState } from "react";
 
 import { api } from "../../services/api";
@@ -8,11 +8,22 @@ interface UploadSectionProps {
   onGenerate: (data: CandidateReport) => void;
 }
 
+interface LinkedInProfile {
+  id?: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
+  email?: string;
+  profile_picture?: string;
+}
+
 export default function UploadSection({
   onGenerate,
 }: UploadSectionProps) {
   const [github, setGithub] = useState("");
-  const [linkedin, setLinkedin] = useState("");
+  const [linkedin] = useState("");
+const [linkedinProfile] = useState<LinkedInProfile | null>(null);
+
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -21,6 +32,11 @@ export default function UploadSection({
   ) => {
     const file = e.target.files?.[0] ?? null;
     setResumeFile(file);
+  };
+
+  const connectLinkedIn = () => {
+    window.location.href =
+      "https://personadna.onrender.com/linkedin/connect";
   };
 
   const handleGenerate = async () => {
@@ -34,8 +50,8 @@ export default function UploadSection({
       return;
     }
 
-    if (!linkedin.trim()) {
-      alert("Please enter your LinkedIn profile URL.");
+    if (!linkedin.trim() && !linkedinProfile) {
+      alert("Please connect your LinkedIn profile first.");
       return;
     }
 
@@ -46,18 +62,29 @@ export default function UploadSection({
 
       formData.append("resume", resumeFile);
       formData.append("github", github);
-      formData.append("linkedin", linkedin);
+
+      if (linkedin.trim()) {
+        formData.append("linkedin", linkedin);
+      } else if (linkedinProfile?.name) {
+        formData.append("linkedin", linkedinProfile.name);
+      }
 
       const response = await api.post<CandidateReport>(
         "/analyze",
         formData
       );
 
-      console.log("PersonaDNA Backend Response:", response.data);
+      console.log(
+        "PersonaDNA Backend Response:",
+        response.data
+      );
 
       onGenerate(response.data);
     } catch (error) {
-      console.error("PersonaDNA analysis failed:", error);
+      console.error(
+        "PersonaDNA analysis failed:",
+        error
+      );
 
       alert(
         "Unable to analyze your profile. Please make sure the PersonaDNA backend is running."
@@ -68,7 +95,10 @@ export default function UploadSection({
   };
 
   return (
-    <section className="bg-[#09090B] py-24">
+    <section
+      id="verify"
+      className="bg-[#09090B] py-24"
+    >
       <div className="mx-auto max-w-5xl px-6">
 
         <div className="text-center">
@@ -133,13 +163,46 @@ export default function UploadSection({
               LinkedIn Profile
             </label>
 
-            <input
-              type="url"
-              value={linkedin}
-              onChange={(e) => setLinkedin(e.target.value)}
-              placeholder="https://linkedin.com/in/username"
-              className="w-full rounded-xl border border-white/10 bg-[#111827] p-4 text-white outline-none focus:border-blue-500"
-            />
+            {!linkedinProfile ? (
+              <button
+                type="button"
+                onClick={connectLinkedIn}
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-500/40 bg-blue-600/10 p-4 font-semibold text-blue-400 transition hover:border-blue-400 hover:bg-blue-600/20"
+              >
+                <User size={20} />
+                Connect with LinkedIn
+              </button>
+            ) : (
+              <div className="flex items-center gap-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+
+                {linkedinProfile.profile_picture ? (
+                  <img
+                    src={linkedinProfile.profile_picture}
+                    alt={linkedinProfile.name || "LinkedIn"}
+                    className="h-12 w-12 rounded-full"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
+                    <User className="text-green-400" />
+                  </div>
+                )}
+
+                <div className="flex-1">
+                  <p className="font-semibold text-white">
+                    {linkedinProfile.name || "LinkedIn User"}
+                  </p>
+
+                  <p className="text-sm text-gray-400">
+                    {linkedinProfile.email || "LinkedIn account connected"}
+                  </p>
+                </div>
+
+                <CheckCircle
+                  className="text-green-400"
+                  size={24}
+                />
+              </div>
+            )}
           </div>
 
           {/* Generate */}
@@ -152,7 +215,7 @@ export default function UploadSection({
             <FileCheck />
 
             {isGenerating
-              ? "Connecting to EvidenceAI..."
+              ? "Analyzing Profile..."
               : "Generate Digital DNA"}
           </button>
 
