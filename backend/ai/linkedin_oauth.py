@@ -260,33 +260,43 @@ def extract_localized_value(
     )
 
 
+
 # ============================================================
-# /identityMe
+# LinkedIn OpenID Connect UserInfo
 # ============================================================
 
 def fetch_linkedin_identity(
     access_token: str,
 ) -> dict:
 
-    return linkedin_get(
-        "/identityMe",
-        access_token,
+    response = requests.get(
+        "https://api.linkedin.com/v2/userinfo",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+        },
+        timeout=15,
     )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"LinkedIn UserInfo request failed: "
+            f"{response.status_code} {response.text}"
+        )
+
+    return response.json()
 
 
 # ============================================================
-# /verificationReport
+# Verification data
 # ============================================================
 
 def fetch_linkedin_verification(
     access_token: str,
 ) -> dict:
 
-    return linkedin_get(
-        "/verificationReport",
-        access_token,
-    )
+   
 
+    return {}
 
 # ============================================================
 # Normalize LinkedIn API response
@@ -297,31 +307,30 @@ def build_linkedin_profile_data(
     verification_data: dict,
 ) -> dict:
 
-    basic_info = identity_data.get(
-        "basicInfo",
-        {},
+    first_name = identity_data.get(
+        "given_name",
+        "",
     )
 
-    first_name = extract_localized_value(
-        basic_info.get(
-            "firstName"
-        )
+    last_name = identity_data.get(
+        "family_name",
+        "",
     )
 
-    last_name = extract_localized_value(
-        basic_info.get(
-            "lastName"
-        )
+    display_name = identity_data.get(
+        "name",
+        "",
     )
 
-    display_name = " ".join(
-        value
-        for value in (
-            first_name,
-            last_name,
-        )
-        if value
-    ).strip()
+    if not display_name:
+        display_name = " ".join(
+            value
+            for value in (
+                first_name,
+                last_name,
+            )
+            if value
+        ).strip()
 
     verification_categories = (
         verification_data.get(
@@ -338,7 +347,8 @@ def build_linkedin_profile_data(
 
     return {
         "id": identity_data.get(
-            "id"
+            "sub",
+            "",
         ),
 
         "first_name": first_name,
@@ -347,13 +357,15 @@ def build_linkedin_profile_data(
 
         "name": display_name,
 
-        "email": basic_info.get(
-            "primaryEmailAddress",
+        "email": identity_data.get(
+            "email",
             "",
         ),
 
-        "profile_url": basic_info.get(
-            "profileUrl",
+        "profile_url": "",
+
+        "profile_picture": identity_data.get(
+            "picture",
             "",
         ),
 
