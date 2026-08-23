@@ -146,7 +146,7 @@ COMMON_SKILLS = [
 
 def extract_skills(resume_text: str) -> list[str]:
     """
-    Extract known skills from the resume text.
+    Extract known skills from resume text.
     """
 
     text = resume_text.lower()
@@ -198,68 +198,39 @@ async def analyze(
 
         try:
 
-            linkedin_profile_data = json.loads(
+            parsed_linkedin = json.loads(
                 linkedin_profile
             )
 
-            # ------------------------------------------------
-            # Frontend may send:
-            #
-            # {
-            #     "code": "...",
-            #     "linkedin": {
-            #         "name": "Gadewar Sohan"
-            #     }
-            # }
-            #
-            # We only need the actual LinkedIn data.
-            # ------------------------------------------------
-
             if isinstance(
-                linkedin_profile_data,
+                parsed_linkedin,
                 dict,
             ):
 
                 if isinstance(
-                    linkedin_profile_data.get(
-                        "linkedin"
-                    ),
+                    parsed_linkedin.get("linkedin"),
                     dict,
                 ):
 
                     linkedin_profile_data = (
-                        linkedin_profile_data[
-                            "linkedin"
-                        ]
+                        parsed_linkedin["linkedin"]
                     )
 
-        except json.JSONDecodeError:
+                else:
+
+                    linkedin_profile_data = (
+                        parsed_linkedin
+                    )
+
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
 
             linkedin_profile_data = None
 
     # ========================================================
-    # LINKEDIN DEBUG
-    # ========================================================
-
-    print("\n========== LINKEDIN DEBUG ==========")
-
-    print(
-        "LinkedIn URL:",
-        linkedin,
-    )
-
-    print(
-        "LinkedIn profile data:",
-        linkedin_profile_data,
-    )
-
-    print(
-        "LinkedIn authorized data:",
-        bool(linkedin_profile_data),
-    )
-
-    # ========================================================
-    # LINKEDIN EVIDENCE
+    # 2. LINKEDIN EVIDENCE
     # ========================================================
 
     linkedin_evidence = analyze_linkedin_evidence(
@@ -270,29 +241,36 @@ async def analyze(
         ),
     )
 
+    print("\n========== LINKEDIN DEBUG ==========")
+
     print(
-        "LinkedIn evidence status:",
-        linkedin_evidence.get(
-            "evidence_status"
-        ),
+        "LinkedIn URL:",
+        linkedin,
+    )
+
+    print(
+        "LinkedIn authorized:",
+        bool(linkedin_profile_data),
     )
 
     print(
         "LinkedIn display name:",
         linkedin_evidence.get(
-            "display_name"
+            "display_name",
+            "",
         ),
     )
 
     print(
         "LinkedIn authorized source:",
         linkedin_evidence.get(
-            "authorized_source"
+            "authorized_source",
+            False,
         ),
     )
 
     # ========================================================
-    # 2. VALIDATE PDF
+    # 3. VALIDATE PDF
     # ========================================================
 
     if resume.content_type != "application/pdf":
@@ -303,14 +281,10 @@ async def analyze(
         )
 
     # ========================================================
-    # 3. READ UPLOADED FILE
+    # 4. READ PDF
     # ========================================================
 
     file_bytes = await resume.read()
-
-    # ========================================================
-    # 4. EXTRACT PDF TEXT
-    # ========================================================
 
     try:
 
@@ -322,11 +296,11 @@ async def analyze(
 
         for page in reader.pages:
 
-            text = page.extract_text() or ""
-
             resume_text += (
-                text + "\n"
+                page.extract_text() or ""
             )
+
+            resume_text += "\n"
 
     except Exception as exc:
 
@@ -336,21 +310,23 @@ async def analyze(
         ) from exc
 
     # ========================================================
-    # 5. VALIDATE EXTRACTED TEXT
+    # 5. VALIDATE TEXT
     # ========================================================
 
     if not resume_text.strip():
 
         raise HTTPException(
             status_code=400,
-            detail="The PDF does not contain readable text.",
+            detail=(
+                "The PDF does not contain readable text."
+            ),
         )
 
     # ========================================================
-    # CANDIDATE EXTRACTION
+    # 6. RESUME EXTRACTION
     # ========================================================
 
-    skills = extract_skills(
+    resume_name = extract_resume_name(
         resume_text
     )
 
@@ -358,15 +334,15 @@ async def analyze(
         resume_text
     )
 
-    resume_name = extract_resume_name(
+    skills = extract_skills(
         resume_text
     )
 
-    print("\n========== CANDIDATE DEBUG ==========")
+    print("\n========== RESUME DEBUG ==========")
 
     print(
         "Resume name:",
-        resume_name,
+        repr(resume_name),
     )
 
     print(
@@ -380,7 +356,7 @@ async def analyze(
     )
 
     # ========================================================
-    # GITHUB ANALYSIS
+    # 7. GITHUB ANALYSIS
     # ========================================================
 
     github_evidence = analyze_github(
@@ -389,26 +365,16 @@ async def analyze(
 
     print("\n========== GITHUB DEBUG ==========")
 
-    for repo in github_evidence.get(
-        "repositories",
-        [],
-    ):
-
-        print(
-            repo.get("name"),
-            "=>",
-            repo.get("technologies"),
-            "| language:",
-            repo.get("language"),
-        )
+    print(
+        "GitHub username:",
+        github,
+    )
 
     print(
-        "GitHub repositories:",
-        len(
-            github_evidence.get(
-                "repositories",
-                [],
-            )
+        "GitHub profile found:",
+        github_evidence.get(
+            "profile_found",
+            False,
         ),
     )
 
@@ -420,15 +386,19 @@ async def analyze(
         ),
     )
 
+    print(
+        "GitHub repository count:",
+        github_evidence.get(
+            "repository_count",
+            0,
+        ),
+    )
+
     # ========================================================
-    # IDENTITY VERIFICATION
+    # 8. LINKEDIN IDENTITY NAME
     # ========================================================
 
     linkedin_identity_name = ""
-
-    # --------------------------------------------------------
-    # Get LinkedIn name from authorized profile data
-    # --------------------------------------------------------
 
     if isinstance(
         linkedin_profile_data,
@@ -441,10 +411,6 @@ async def analyze(
                 "",
             )
         ).strip()
-
-        # ----------------------------------------------------
-        # Fallback to first_name + last_name
-        # ----------------------------------------------------
 
         if not linkedin_identity_name:
 
@@ -464,17 +430,14 @@ async def analyze(
 
             linkedin_identity_name = " ".join(
                 part
-                for part in [
+                for part in (
                     first_name,
                     last_name,
-                ]
+                )
                 if part
             ).strip()
 
-    # --------------------------------------------------------
-    # Final fallback to normalized LinkedIn evidence
-    # --------------------------------------------------------
-
+    # Fallback
     if not linkedin_identity_name:
 
         linkedin_identity_name = str(
@@ -484,11 +447,14 @@ async def analyze(
             )
         ).strip()
 
-    # --------------------------------------------------------
-    # IMPORTANT:
-    #
-    # Never use the LinkedIn URL as the person's name.
-    # --------------------------------------------------------
+    print(
+        "LinkedIn identity name:",
+        repr(linkedin_identity_name),
+    )
+
+    # ========================================================
+    # 9. IDENTITY COMPARISON
+    # ========================================================
 
     identity = compare_identity(
         resume_name=resume_name,
@@ -500,60 +466,50 @@ async def analyze(
         ),
     )
 
-    # ========================================================
-    # IDENTITY DEBUG
-    # ========================================================
-
     print("\n========== IDENTITY DEBUG ==========")
 
     print(
-        "Resume name:",
-        resume_name,
-    )
-
-    print(
-        "GitHub name:",
-        github_evidence.get(
-            "display_name",
+        "Resume:",
+        identity.get(
+            "resume_normalized",
             "",
         ),
     )
 
     print(
-        "LinkedIn name:",
-        linkedin_identity_name,
+        "GitHub:",
+        identity.get(
+            "github_normalized",
+            "",
+        ),
+    )
+
+    print(
+        "LinkedIn:",
+        identity.get(
+            "linkedin_normalized",
+            "",
+        ),
     )
 
     print(
         "GitHub match:",
         identity.get(
-            "github_match"
+            "github_match",
+            False,
         ),
     )
 
     print(
         "LinkedIn match:",
         identity.get(
-            "linkedin_match"
-        ),
-    )
-
-    print(
-        "GitHub score:",
-        identity.get(
-            "github_username_score"
-        ),
-    )
-
-    print(
-        "LinkedIn score:",
-        identity.get(
-            "linkedin_username_score"
+            "linkedin_match",
+            False,
         ),
     )
 
     # ========================================================
-    # CLAIM EVIDENCE
+    # 10. ENRICH CLAIMS
     # ========================================================
 
     claims = enrich_claims_with_github(
@@ -566,45 +522,50 @@ async def analyze(
         linkedin_evidence,
     )
 
+    # ========================================================
+    # 11. LINKEDIN SUMMARY
+    # ========================================================
+
     linkedin_summary = build_linkedin_summary(
         linkedin_evidence
     )
 
     # ========================================================
-    # CLAIM DEBUG
-    # ========================================================
-
-    print("\n========== CLAIM DEBUG ==========")
-
-    for claim in claims:
-
-        if claim.get("claim") in {
-            "Python",
-            "JavaScript",
-            "React",
-            "SQL",
-            "MongoDB",
-            "GitHub",
-        }:
-
-            print(
-                claim.get("claim"),
-                "=>",
-                claim.get("evidence"),
-                "| status:",
-                claim.get("status"),
-            )
-
-    # ========================================================
-    # CLAIM STATS
+    # 12. CLAIM STATS
     # ========================================================
 
     claim_stats = calculate_claim_stats(
         claims
     )
 
+    print("\n========== CLAIM STATS ==========")
+
+    print(
+        "Detected:",
+        claim_stats.get(
+            "detected",
+            0,
+        ),
+    )
+
+    print(
+        "Supported:",
+        claim_stats.get(
+            "supported",
+            0,
+        ),
+    )
+
+    print(
+        "Needs review:",
+        claim_stats.get(
+            "needs_review",
+            0,
+        ),
+    )
+
     # ========================================================
-    # EVIDENCE REPORT
+    # 13. EVIDENCE REPORT
     # ========================================================
 
     evidence_report = build_evidence_report(
@@ -612,23 +573,8 @@ async def analyze(
         github_evidence,
     )
 
-    print("\n========== EVIDENCE DEBUG ==========")
-
-    for item in evidence_report:
-
-        if item.get("claim") in {
-            "Python",
-            "JavaScript",
-            "React",
-            "SQL",
-            "MongoDB",
-            "GitHub",
-        }:
-
-            print(item)
-
     # ========================================================
-    # RISK REPORT
+    # 14. RISK REPORT
     # ========================================================
 
     risk_report = build_risk_report(
@@ -642,7 +588,7 @@ async def analyze(
     )
 
     # ========================================================
-    # SKILL → REPOSITORY MAPPING
+    # 15. SKILL → REPOSITORY MAPPING
     # ========================================================
 
     skill_repository_mapping = (
@@ -653,7 +599,7 @@ async def analyze(
     )
 
     # ========================================================
-    # CANDIDATE INTELLIGENCE
+    # 16. CANDIDATE INTELLIGENCE
     # ========================================================
 
     candidate_intelligence = (
@@ -666,7 +612,7 @@ async def analyze(
     )
 
     # ========================================================
-    # PROJECT → REPOSITORY MAPPING
+    # 17. PROJECT → REPOSITORY MAPPING
     # ========================================================
 
     project_repository_mapping = (
@@ -676,16 +622,8 @@ async def analyze(
         )
     )
 
-    print(
-        "\n========== CANDIDATE INTELLIGENCE DONE =========="
-    )
-
-    print(
-        candidate_intelligence
-    )
-
     # ========================================================
-    # TRUST SCORE
+    # 18. TRUST SCORE
     # ========================================================
 
     scoring = calculate_trust_score(
@@ -693,12 +631,51 @@ async def analyze(
         github_evidence,
     )
 
-    verified_claims = claim_stats[
-        "supported"
-    ]
+    print("\n========== TRUST SCORE ==========")
+
+    print(
+        "Trust score:",
+        scoring.get(
+            "trust_score",
+            0,
+        ),
+    )
+
+    print(
+        "Risk:",
+        scoring.get(
+            "risk_level",
+            "Medium",
+        ),
+    )
+
+    print(
+        "Verdict:",
+        scoring.get(
+            "recruiter_verdict",
+            "",
+        ),
+    )
+
+    print(
+        "Breakdown:",
+        scoring.get(
+            "score_breakdown",
+            {},
+        ),
+    )
 
     # ========================================================
-    # AI CONFIDENCE
+    # 19. VERIFIED CLAIMS
+    # ========================================================
+
+    verified_claims = claim_stats.get(
+        "supported",
+        0,
+    )
+
+    # ========================================================
+    # 20. AI CONFIDENCE
     # ========================================================
 
     ai_confidence = calculate_confidence(
@@ -744,8 +721,16 @@ async def analyze(
 
         ai_confidence = 0
 
+    ai_confidence = min(
+        100,
+        max(
+            0,
+            ai_confidence,
+        ),
+    )
+
     # ========================================================
-    # STRENGTHS
+    # 21. STRENGTHS
     # ========================================================
 
     strengths = []
@@ -754,10 +739,6 @@ async def analyze(
         f"Resume successfully extracted with "
         f"{len(resume_text)} characters of readable text."
     )
-
-    # --------------------------------------------------------
-    # GitHub evidence
-    # --------------------------------------------------------
 
     if github_evidence.get(
         "profile_found",
@@ -770,16 +751,6 @@ async def analyze(
             f"public repositories."
         )
 
-    else:
-
-        strengths.append(
-            "GitHub profile could not be verified."
-        )
-
-    # --------------------------------------------------------
-    # GitHub identity
-    # --------------------------------------------------------
-
     if identity.get(
         "github_match",
         False,
@@ -789,10 +760,6 @@ async def analyze(
             "GitHub identity is consistent "
             "with the resume."
         )
-
-    # --------------------------------------------------------
-    # LinkedIn identity
-    # --------------------------------------------------------
 
     if identity.get(
         "linkedin_match",
@@ -804,10 +771,6 @@ async def analyze(
             "with the resume."
         )
 
-    # --------------------------------------------------------
-    # LinkedIn authorization
-    # --------------------------------------------------------
-
     if linkedin_evidence.get(
         "authorized_source",
         False,
@@ -817,10 +780,6 @@ async def analyze(
             "LinkedIn profile was connected "
             "through an authorized integration."
         )
-
-    # --------------------------------------------------------
-    # Technology evidence
-    # --------------------------------------------------------
 
     technology_evidence = (
         github_evidence.get(
@@ -837,14 +796,10 @@ async def analyze(
         )
 
     # ========================================================
-    # WARNINGS
+    # 22. WARNINGS
     # ========================================================
 
     warnings = []
-
-    # --------------------------------------------------------
-    # GitHub identity warning
-    # --------------------------------------------------------
 
     if not identity.get(
         "github_match",
@@ -855,10 +810,6 @@ async def analyze(
             "GitHub identity does not match "
             "the name detected in the resume."
         )
-
-    # --------------------------------------------------------
-    # LinkedIn identity warning
-    # --------------------------------------------------------
 
     if (
         linkedin_evidence.get(
@@ -876,10 +827,6 @@ async def analyze(
             "the name detected in the resume."
         )
 
-    # --------------------------------------------------------
-    # LinkedIn authorization warning
-    # --------------------------------------------------------
-
     if (
         linkedin
         and not linkedin_evidence.get(
@@ -894,10 +841,6 @@ async def analyze(
             "is not available."
         )
 
-    # --------------------------------------------------------
-    # GitHub profile warning
-    # --------------------------------------------------------
-
     if not github_evidence.get(
         "profile_found",
         False,
@@ -907,17 +850,10 @@ async def analyze(
             "GitHub profile could not be verified."
         )
 
-    # --------------------------------------------------------
-    # Claim warnings
-    # --------------------------------------------------------
-
-    if (
-        claim_stats.get(
-            "needs_review",
-            0,
-        )
-        > 0
-    ):
+    if claim_stats.get(
+        "needs_review",
+        0,
+    ) > 0:
 
         warnings.append(
             f"{claim_stats['needs_review']} "
@@ -925,7 +861,7 @@ async def analyze(
         )
 
     # ========================================================
-    # FINAL LINKEDIN STATUS
+    # 23. LINKEDIN VERIFIED
     # ========================================================
 
     linkedin_verified = (
@@ -939,18 +875,42 @@ async def analyze(
         )
     )
 
-    print("\n========== FINAL LINKEDIN STATUS ==========")
+    # ========================================================
+    # 24. FINAL DEBUG
+    # ========================================================
+
+    print("\n========== FINAL PERSONADNA RESULT ==========")
 
     print(
-        "Authorized:",
-        linkedin_evidence.get(
-            "authorized_source",
+        "Resume name:",
+        repr(resume_name),
+    )
+
+    print(
+        "GitHub:",
+        repr(
+            github_evidence.get(
+                "display_name",
+                "",
+            )
+        ),
+    )
+
+    print(
+        "LinkedIn:",
+        repr(linkedin_identity_name),
+    )
+
+    print(
+        "GitHub match:",
+        identity.get(
+            "github_match",
             False,
         ),
     )
 
     print(
-        "Identity match:",
+        "LinkedIn match:",
         identity.get(
             "linkedin_match",
             False,
@@ -958,64 +918,73 @@ async def analyze(
     )
 
     print(
-        "LinkedIn verified:",
-        linkedin_verified,
+        "Trust score:",
+        scoring.get(
+            "trust_score",
+            0,
+        ),
     )
 
+    print(
+        "AI confidence:",
+        ai_confidence,
+    )
+
+    print(
+        "Verified claims:",
+        verified_claims,
+    )
+
+    print(
+        "============================================")
+
     # ========================================================
-    # FINAL RESPONSE
+    # 25. FINAL RESPONSE
     # ========================================================
 
     return {
 
-        # ----------------------------------------------------
         # Core scoring
-        # ----------------------------------------------------
-
-        "trust_score": scoring[
-            "trust_score"
-        ],
+        "trust_score": scoring.get(
+            "trust_score",
+            0,
+        ),
 
         "ai_confidence": ai_confidence,
 
         "verified_claims": verified_claims,
 
-        "risk_level": scoring[
-            "risk_level"
-        ],
+        "risk_level": scoring.get(
+            "risk_level",
+            "Medium",
+        ),
 
-        "recruiter_verdict": scoring[
-            "recruiter_verdict"
-        ],
+        "recruiter_verdict": scoring.get(
+            "recruiter_verdict",
+            "Manual Verification Recommended",
+        ),
 
-        # ----------------------------------------------------
+        "score_breakdown": scoring.get(
+            "score_breakdown",
+            {},
+        ),
+
         # Claims
-        # ----------------------------------------------------
-
         "claim_stats": claim_stats,
 
         "claims": claims,
 
         "skills": skills,
 
-        # ----------------------------------------------------
         # Identity
-        # ----------------------------------------------------
-
         "identity": identity,
 
-        # ----------------------------------------------------
         # GitHub
-        # ----------------------------------------------------
-
         "github_evidence": github_evidence,
 
         "github": github,
 
-        # ----------------------------------------------------
         # LinkedIn
-        # ----------------------------------------------------
-
         "linkedin": linkedin,
 
         "linkedin_evidence": linkedin_evidence,
@@ -1024,20 +993,14 @@ async def analyze(
 
         "linkedin_verified": linkedin_verified,
 
-        # ----------------------------------------------------
         # Reports
-        # ----------------------------------------------------
-
         "evidence_report": evidence_report,
 
         "risk_report": risk_report,
 
         "risk_summary": risk_summary,
 
-        # ----------------------------------------------------
         # Intelligence
-        # ----------------------------------------------------
-
         "candidate_intelligence": candidate_intelligence,
 
         "skill_repository_mapping": (
@@ -1048,29 +1011,20 @@ async def analyze(
             project_repository_mapping
         ),
 
-        # ----------------------------------------------------
         # Strengths / warnings
-        # ----------------------------------------------------
-
         "strengths": strengths,
 
         "warnings": warnings,
 
-        # ----------------------------------------------------
-        # Resume information
-        # ----------------------------------------------------
-
+        # Resume
         "resume_file_name": resume.filename,
 
         "resume_characters": len(
             resume_text
         ),
 
-        "resume_preview": (
-            resume_text[:2000]
-        ),
+        "resume_preview": resume_text[:2000],
     }
-
 
 # ============================================================
 # LINKEDIN OAUTH — CONNECT
@@ -1112,9 +1066,6 @@ def linkedin_callback(
     error: str = "",
     error_description: str = "",
 ):
-    """
-    LinkedIn OAuth callback.
-    """
 
     print(
         "\n========== LINKEDIN CALLBACK =========="
@@ -1152,9 +1103,7 @@ def linkedin_callback(
     # Validate OAuth state
     # --------------------------------------------------------
 
-    if not validate_oauth_state(
-        state
-    ):
+    if not validate_oauth_state(state):
 
         raise HTTPException(
             status_code=400,
@@ -1169,10 +1118,8 @@ def linkedin_callback(
         # Exchange authorization code
         # ----------------------------------------------------
 
-        token_data = (
-            exchange_code_for_token(
-                code
-            )
+        token_data = exchange_code_for_token(
+            code
         )
 
         access_token = token_data.get(
@@ -1267,10 +1214,8 @@ def linkedin_result(
             ),
         )
 
-    linkedin_data = (
-        consume_oauth_result(
-            code
-        )
+    linkedin_data = consume_oauth_result(
+        code
     )
 
     if not linkedin_data:
@@ -1289,11 +1234,6 @@ def linkedin_result(
 
     print(
         "LinkedIn result successfully consumed."
-    )
-
-    print(
-        "LinkedIn data:",
-        linkedin_data,
     )
 
     return {

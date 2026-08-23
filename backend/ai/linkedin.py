@@ -123,16 +123,13 @@ def analyze_linkedin_evidence(
     integration after member consent.
     """
 
-    if not linkedin_url:
-        return linkedin_unavailable(
-            "",
-            "missing",
-        )
+    
 
     if not consent_granted:
         return linkedin_unavailable(
             linkedin_url,
             "consent_required",
+            
         )
 
     if not isinstance(profile_data, dict):

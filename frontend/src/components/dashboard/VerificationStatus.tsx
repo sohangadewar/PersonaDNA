@@ -48,17 +48,21 @@ function StatusBadge({
 export default function VerificationStatus({
   report,
 }: VerificationStatusProps) {
-  const githubMismatch = report.warnings.some((warning) =>
-    warning.toLowerCase().includes("github identity")
-  );
+ const githubMismatch = report.warnings.some((warning) =>
+  warning.toLowerCase().includes("github identity")
+);
 
-  const linkedinMismatch = report.warnings.some((warning) =>
-    warning.toLowerCase().includes("linkedin identity")
-  );
+const linkedinMismatch = report.warnings.some((warning) =>
+  warning.toLowerCase().includes("linkedin identity")
+);
 
-  const githubFound = report.strengths.some((strength) =>
-    strength.toLowerCase().includes("github profile found")
-  );
+const githubFound = report.strengths.some((strength) =>
+  strength.toLowerCase().includes("github profile found")
+);
+
+const linkedinVerified =
+  report.identity?.linkedin_match === true ||
+  report.linkedin_evidence?.authorized_source === true;
 
   return (
     <div className="mt-8 rounded-3xl bg-[#111827] p-8">
@@ -148,7 +152,9 @@ export default function VerificationStatus({
               status={
                 linkedinMismatch
                   ? "mismatch"
-                  : "warning"
+                  : linkedinVerified
+                    ? "verified"
+                    : "warning"
               }
             />
           </div>
