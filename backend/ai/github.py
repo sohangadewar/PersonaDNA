@@ -1,4 +1,3 @@
-
 from urllib.parse import urlparse
 import base64
 
@@ -31,7 +30,6 @@ def extract_github_username(github_url: str) -> str:
 # ============================================================
 # GitHub API Helper
 # ============================================================
-
 def github_get(url: str, params: dict | None = None):
     try:
         response = requests.get(
@@ -39,18 +37,23 @@ def github_get(url: str, params: dict | None = None):
             params=params,
             timeout=10,
             headers={
-                "Accept": "application/vnd.github+json"
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "PersonaDNA",
             },
         )
 
-        if response.status_code == 200:
-            return response.json()
+        print("GitHub URL:", response.url)
+        print("GitHub Status:", response.status_code)
 
-    except requests.RequestException:
-        pass
+        if response.status_code != 200:
+            print("GitHub Error:", response.text[:500])
+            return None
 
-    return None
+        return response.json()
 
+    except requests.RequestException as e:
+        print("GitHub Request Error:", str(e))
+        return None
 
 # ============================================================
 # Get File Content
@@ -443,6 +446,24 @@ def analyze_repository(
     )
 
     # --------------------------------------------------------
+    # RAG / Jarvis Evidence Detection
+    # --------------------------------------------------------
+
+    specialized_evidence = detect_rag_and_jarvis_evidence(
+        owner,
+        repo_name,
+        files,
+    )
+
+    technologies.extend(
+        specialized_evidence["technologies"]
+    )
+
+    technologies = list(
+        dict.fromkeys(technologies)
+    )
+
+    # --------------------------------------------------------
     # Return Repository Evidence
     # --------------------------------------------------------
 
@@ -455,6 +476,7 @@ def analyze_repository(
         "dependency_files": dependency_result[
             "dependency_files"
         ],
+        "specialized_evidence": specialized_evidence["evidence"],
         "files": files,
         "has_readme": has_readme,
         "stars": stars,
@@ -466,6 +488,194 @@ def analyze_repository(
 # ============================================================
 # Main GitHub Analyzer
 # ============================================================
+# ============================================================
+# RAG + Jarvis Evidence Detection
+# ============================================================
+
+def detect_rag_and_jarvis_evidence(
+    owner: str,
+    repo_name: str,
+    files: list[str],
+) -> dict:
+    """
+    Detect actual RAG and Jarvis evidence from repository files.
+    This is evidence-based detection, not resume-based guessing.
+    """
+
+    technologies = []
+    evidence = {
+        "rag": [],
+        "jarvis": [],
+    }
+
+    normalized_files = {
+        file.lower(): file
+        for file in files
+    }
+
+    # --------------------------------------------------------
+    # RAG indicators
+    # --------------------------------------------------------
+
+    rag_file_patterns = [
+        "rag",
+        "retrieval",
+        "retriever",
+        "vector",
+        "embedding",
+        "embeddings",
+        "chromadb",
+        "faiss",
+        "qdrant",
+        "pinecone",
+        "pgvector",
+        "langchain",
+        "llamaindex",
+    ]
+
+    # --------------------------------------------------------
+    # Jarvis indicators
+    # --------------------------------------------------------
+
+    jarvis_file_patterns = [
+        "jarvis",
+        "assistant",
+        "voice",
+        "speech",
+        "tts",
+        "stt",
+        "speech_recognition",
+        "pyttsx3",
+        "pygame",
+        "wake_word",
+        "wakeword",
+    ]
+
+    for original_file in files:
+
+        file_lower = original_file.lower()
+
+        # RAG
+        for pattern in rag_file_patterns:
+
+            if pattern in file_lower:
+
+                evidence["rag"].append({
+                    "file": original_file,
+                    "indicator": pattern,
+                })
+
+                if "RAG" not in technologies:
+                    technologies.append("RAG")
+
+                break
+
+        # Jarvis
+        for pattern in jarvis_file_patterns:
+
+            if pattern in file_lower:
+
+                evidence["jarvis"].append({
+                    "file": original_file,
+                    "indicator": pattern,
+                })
+
+                if "Jarvis" not in technologies:
+                    technologies.append("Jarvis")
+
+                break
+
+    # --------------------------------------------------------
+    # Inspect dependency files
+    # --------------------------------------------------------
+
+    dependency_files_to_check = [
+        "requirements.txt",
+        "pyproject.toml",
+        "package.json",
+    ]
+
+    for dependency_file in dependency_files_to_check:
+
+        actual_file = normalized_files.get(
+            dependency_file
+        )
+
+        if not actual_file:
+            continue
+
+        content = get_file_content(
+            owner,
+            repo_name,
+            actual_file,
+        )
+
+        if not content:
+            continue
+
+        content_lower = content.lower()
+
+        # -----------------------------
+        # RAG dependencies
+        # -----------------------------
+
+        rag_dependencies = [
+            "langchain",
+            "langchain-community",
+            "langchain-core",
+            "langchain-openai",
+            "langchain-google",
+            "llama-index",
+            "chromadb",
+            "faiss",
+            "qdrant",
+            "pinecone",
+            "pgvector",
+            "sentence-transformers",
+        ]
+
+        for dependency in rag_dependencies:
+
+            if dependency in content_lower:
+
+                evidence["rag"].append({
+                    "file": actual_file,
+                    "dependency": dependency,
+                })
+
+                if "RAG" not in technologies:
+                    technologies.append("RAG")
+
+        # -----------------------------
+        # Jarvis dependencies
+        # -----------------------------
+
+        jarvis_dependencies = [
+            "speechrecognition",
+            "pyttsx3",
+            "pygame",
+            "pyaudio",
+            "vosk",
+            "openai",
+            "google-generativeai",
+        ]
+
+        for dependency in jarvis_dependencies:
+
+            if dependency in content_lower:
+
+                evidence["jarvis"].append({
+                    "file": actual_file,
+                    "dependency": dependency,
+                })
+
+                if "Jarvis" not in technologies:
+                    technologies.append("Jarvis")
+
+    return {
+        "technologies": technologies,
+        "evidence": evidence,
+    }
 
 def analyze_github(
     github_url: str,
@@ -533,12 +743,30 @@ def analyze_github(
             "sort": "updated",
         },
     )
+    print("USERNAME:", username)
+    print("REPOSITORIES RESPONSE:", repositories)
+    print("======================================")
+    print("GITHUB REPOSITORY API")
+    print("URL:", repos_url)
+    print("RESULT TYPE:", type(repositories))
+    print("RESULT:", repositories)
+    print("======================================")
 
-    if not isinstance(
-        repositories,
-        list,
-    ):
-        repositories = []
+    if not isinstance(repositories, list):
+        print("GitHub repositories API did not return a list.")
+        print("Response:", repositories)
+
+        return {
+            "username": username,
+            "profile_found": True,
+            "display_name": profile.get("name"),
+            "bio": profile.get("bio"),
+            "public_repositories": profile.get("public_repos", 0),
+            "repository_count": 0,
+            "repositories": [],
+            "technology_evidence": [],
+            "evidence_status": "repository_api_error",
+        }
 
     analyzed_repositories = []
 

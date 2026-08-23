@@ -261,4 +261,5 @@ def compare_identity(
         "resume_normalized": resume_normalized,
         "github_normalized": github_normalized,
         "linkedin_normalized": linkedin_normalized,
+        
     }
