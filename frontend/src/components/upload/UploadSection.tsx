@@ -118,9 +118,9 @@ export default function UploadSection({
   
 
   const connectLinkedIn = () => {
-    window.location.href =
-      "https://personadna-1.onrender.com/linkedin/connect";
-  };
+  window.location.href =
+    "https://personadna.onrender.com/linkedin/connect";
+};;
 
   // ============================================================
   // GENERATE DIGITAL DNA
