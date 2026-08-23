@@ -1,5 +1,5 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "https://personadna.onrender.com",
+  baseURL: "https://personadna-1.onrender.com",
 });

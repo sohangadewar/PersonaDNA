@@ -119,7 +119,7 @@ export default function UploadSection({
 
   const connectLinkedIn = () => {
     window.location.href =
-      "https://personadna.onrender.com/linkedin/connect";
+      "https://personadna-1.onrender.com/linkedin/connect";
   };
 
   // ============================================================
