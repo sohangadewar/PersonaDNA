@@ -60,7 +60,7 @@ from ai.rag import (
     build_recruiter_prompt,
 )
 
-from backend.ai.rag_engine import (
+from ai.rag_engine import (
     verify_claim_with_rag,
 )
 

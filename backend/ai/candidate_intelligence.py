@@ -1,4 +1,4 @@
-from backend.ai.rag_engine import verify_claim_with_rag
+from ai.rag_engine import verify_claim_with_rag
 import json
 
 def normalize_text(value) -> str:
@@ -316,3 +316,98 @@ def _safe_json(value) -> str:
         return json.dumps(value, indent=2, default=str)
     except (TypeError, ValueError):
         return str(value)
+    
+def build_candidate_intelligence(
+    claims,
+    github_evidence,
+    identity,
+    resume_text,
+):
+    """
+    Build a candidate intelligence summary from
+    resume claims, GitHub evidence, and identity.
+    """
+
+    claims = claims or []
+    github_evidence = github_evidence or {}
+    identity = identity or {}
+    resume_text = resume_text or ""
+
+    suspicious_claims = detect_suspicious_claims(
+        claims=claims,
+        identity=identity,
+        github_evidence=github_evidence,
+    )
+
+    claim_evidence = []
+
+    for claim in claims:
+
+        if not isinstance(claim, dict):
+            continue
+
+        if claim.get("type") != "skill":
+            continue
+
+        evidence = claim.get(
+            "evidence",
+            {},
+        )
+
+        evidence_result = calculate_evidence_strength(
+            claim=claim,
+            github_evidence=github_evidence,
+        )
+
+        claim_evidence.append(
+            {
+                "claim": claim.get(
+                    "claim",
+                    "",
+                ),
+                "type": claim.get(
+                    "type",
+                    "",
+                ),
+                "score": evidence_result["score"],
+                "strength": evidence_result["strength"],
+                "sources": evidence_result["sources"],
+            }
+        )
+
+    total_claims = len(claim_evidence)
+
+    if total_claims > 0:
+        overall_evidence_score = round(
+            sum(
+                item["score"]
+                for item in claim_evidence
+            ) / total_claims
+        )
+    else:
+        overall_evidence_score = 0
+
+    if overall_evidence_score >= 80:
+        evidence_level = "strong"
+
+    elif overall_evidence_score >= 50:
+        evidence_level = "moderate"
+
+    elif overall_evidence_score > 0:
+        evidence_level = "weak"
+
+    else:
+        evidence_level = "none"
+
+    return {
+        "overall_evidence_score": overall_evidence_score,
+        "evidence_level": evidence_level,
+        "claim_evidence": claim_evidence,
+        "project_evidence": extract_project_evidence(
+            claims
+        ),
+        "suspicious_claims": suspicious_claims,
+        "suspicious_claim_count": len(
+            suspicious_claims
+        ),
+    }
