@@ -45,16 +45,42 @@ def github_get(url: str, params: dict | None = None):
         print("GitHub URL:", response.url)
         print("GitHub Status:", response.status_code)
 
+        # Rate limit
+        if response.status_code == 403:
+            remaining = response.headers.get(
+                "X-RateLimit-Remaining"
+            )
+
+            reset = response.headers.get(
+                "X-RateLimit-Reset"
+            )
+
+            print(
+                f"GitHub rate limit. "
+                f"Remaining={remaining}, Reset={reset}"
+            )
+
+            return None
+
+        if response.status_code == 404:
+            print("GitHub resource not found:", url)
+            return None
+
         if response.status_code != 200:
-            print("GitHub Error:", response.text[:500])
+            print(
+                "GitHub Error:",
+                response.text[:500]
+            )
             return None
 
         return response.json()
 
     except requests.RequestException as e:
-        print("GitHub Request Error:", str(e))
+        print(
+            "GitHub Request Error:",
+            str(e)
+        )
         return None
-
 # ============================================================
 # Get File Content
 # ============================================================

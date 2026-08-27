@@ -631,22 +631,41 @@ def calculate_claim_stats(
     claims: list[dict],
 ) -> dict:
 
+    supported_statuses = {
+        "supported",
+        "verified",
+        "confirmed",
+    }
+
+    needs_review_statuses = {
+        "needs_review",
+        "review",
+    }
+
     return {
-        "detected": len(
-            claims
-        ),
+        "detected": len(claims),
+
         "supported": sum(
             1
             for claim in claims
-            if claim.get(
-                "status"
-            ) == "supported"
+            if str(
+                claim.get(
+                    "status",
+                    "",
+                )
+            ).lower()
+            in supported_statuses
         ),
+
         "needs_review": sum(
             1
             for claim in claims
-            if claim.get(
-                "status"
-            ) == "needs_review"
+            if str(
+                claim.get(
+                    "status",
+                    "",
+                )
+            ).lower()
+            in needs_review_statuses
         ),
     }

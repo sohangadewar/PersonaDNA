@@ -829,9 +829,16 @@ async def analyze(
 
     scoring = calculate_trust_score(
 
-        identity,
+    identity=identity,
 
-        github_evidence,
+    github_evidence=github_evidence,
+
+    claims=claims,
+
+    evidence_report=evidence_report,
+
+    linkedin_evidence=linkedin_evidence,
+
 
     )
 

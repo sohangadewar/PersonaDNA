@@ -1,16 +1,4 @@
-"""
-ai/rag.py
 
-Builds a single text "knowledge base" string for one candidate by combining
-their resume, extracted claims, GitHub evidence, LinkedIn evidence, and
-derived intelligence/mappings into one document. This text is what gets fed
-to the RAG pipeline (e.g. ai/rag_engine.py) so an LLM can answer recruiter
-questions or verify claims using only facts that are actually in here.
-
-Also provides build_recruiter_prompt, which wraps a recruiter's question
-together with that knowledge text into a single prompt ready to send to
-an LLM.
-"""
 
 import json
 
