@@ -83,22 +83,37 @@ def calculate_trust_score(
         "true",
     }
 
+    partially_supported_statuses = {
+        "partially_supported",
+        "partially supported",
+    }
+
     if rag_claims:
 
-        rag_verified = sum(
-            1
-            for claim in rag_claims
-            if str(
+        rag_verified = 0
+        rag_partial = 0
+
+        for claim in rag_claims:
+
+            status = str(
                 claim.get(
                     "rag_status",
                     "",
                 )
             ).strip().lower()
-            in verified_statuses
-        )
+
+            if status in verified_statuses:
+                rag_verified += 1
+
+            elif status in partially_supported_statuses:
+                rag_partial += 1
 
         rag_score = (
-            rag_verified / len(rag_claims)
+            (
+                rag_verified
+                + (rag_partial * 0.5)
+            )
+            / len(rag_claims)
         ) * 20
 
     else:
