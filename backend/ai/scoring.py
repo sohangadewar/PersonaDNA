@@ -29,6 +29,10 @@ def calculate_trust_score(
     # 1. CLAIM EVIDENCE - 40 POINTS
     # ========================================================
 
+        # ========================================================
+    # 1. CLAIM EVIDENCE - 40 POINTS
+    # ========================================================
+
     if claims:
 
         supported_claims = 0.0
@@ -49,13 +53,18 @@ def calculate_trust_score(
                 )
             ).strip().lower()
 
-            rag_confidence = float(
-                claim.get(
-                    "rag_confidence",
-                    0,
+            try:
+                rag_confidence = float(
+                    claim.get(
+                        "rag_confidence",
+                        0,
+                    ) or 0
                 )
-                or 0
-            )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                rag_confidence = 0.0
 
             github_supported = (
                 claim.get(
@@ -68,38 +77,64 @@ def calculate_trust_score(
                 is True
             )
 
-            # Strong direct evidence
+            # ----------------------------------------------
+            # Fully supported claim
+            # ----------------------------------------------
+
             if (
-                status == "supported"
+                status in {
+                    "supported",
+                    "verified",
+                    "confirmed",
+                }
+                or github_supported
                 or rag_status in {
                     "verified",
                     "supported",
                     "confirmed",
-                    "matched",
                     "match",
+                    "matched",
                     "strong",
                 }
-                or github_supported
             ):
+
                 supported_claims += 1.0
 
-            # Partial RAG evidence
+            # ----------------------------------------------
+            # Partially supported claim
+            # ----------------------------------------------
+
             elif (
-                rag_status
-                in {
+                rag_status in {
                     "partially_supported",
                     "partially supported",
                 }
                 and rag_confidence >= 50
             ):
-                supported_claims += 0.5
+
+                supported_claims += 0.75
+
+            # ----------------------------------------------
+            # Good RAG confidence even if status differs
+            # ----------------------------------------------
+
+            elif rag_confidence >= 80:
+
+                supported_claims += 0.75
+
+            elif rag_confidence >= 60:
+
+                supported_claims += 0.50
 
         claim_ratio = (
             supported_claims
             / len(claims)
         )
 
-        claim_score = claim_ratio * 40
+        claim_score = min(
+            claim_ratio * 40,
+            40,
+        )
 
     else:
 
@@ -110,7 +145,6 @@ def calculate_trust_score(
     breakdown["claim_evidence"] = round(
         claim_score
     )
-
     # ========================================================
     # 2. RAG VERIFICATION - 20 POINTS
     # ========================================================
