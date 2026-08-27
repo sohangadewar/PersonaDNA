@@ -1,10 +1,14 @@
-from urllib.parse import urlparse
 import base64
+import os
+from urllib.parse import urlparse
 
 import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
 GITHUB_API = "https://api.github.com"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 
 # ============================================================
@@ -32,14 +36,19 @@ def extract_github_username(github_url: str) -> str:
 # ============================================================
 def github_get(url: str, params: dict | None = None):
     try:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "PersonaDNA",
+        }
+
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
         response = requests.get(
             url,
             params=params,
             timeout=10,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "PersonaDNA",
-            },
+            headers=headers,
         )
 
         print("GitHub URL:", response.url)
@@ -47,13 +56,8 @@ def github_get(url: str, params: dict | None = None):
 
         # Rate limit
         if response.status_code == 403:
-            remaining = response.headers.get(
-                "X-RateLimit-Remaining"
-            )
-
-            reset = response.headers.get(
-                "X-RateLimit-Reset"
-            )
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            reset = response.headers.get("X-RateLimit-Reset")
 
             print(
                 f"GitHub rate limit. "
@@ -67,20 +71,16 @@ def github_get(url: str, params: dict | None = None):
             return None
 
         if response.status_code != 200:
-            print(
-                "GitHub Error:",
-                response.text[:500]
-            )
+            print("GitHub Error:", response.text[:500])
             return None
 
         return response.json()
 
     except requests.RequestException as e:
-        print(
-            "GitHub Request Error:",
-            str(e)
-        )
+        print("GitHub Request Error:", str(e))
         return None
+
+
 # ============================================================
 # Get File Content
 # ============================================================
