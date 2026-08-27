@@ -429,10 +429,186 @@ def find_matching_evidence(
     claim: str,
     evidence_text: str,
     source_name: str,
+    structured_evidence: dict | None = None,
 ) -> dict:
     """
-    Search evidence for lexical support for a claim.
+    Find evidence supporting a claim.
+
+    For GitHub, structured repository evidence is checked
+    first. This avoids relying only on generic text similarity.
     """
+
+    if structured_evidence is None:
+        structured_evidence = {}
+
+    claim_text = _safe_string(
+        claim
+    ).strip()
+
+    # ========================================================
+    # GITHUB STRUCTURED EVIDENCE
+    # ========================================================
+
+    if source_name == "github":
+
+        target = normalize_text(
+            claim_text
+        )
+
+        repositories = structured_evidence.get(
+            "repositories",
+            [],
+        )
+
+        if isinstance(
+            repositories,
+            list,
+        ):
+
+            matched_repositories = []
+
+            for repository in repositories:
+
+                if not isinstance(
+                    repository,
+                    dict,
+                ):
+                    continue
+
+                evidence_types = []
+
+                # ------------------------------------------------
+                # Technologies
+                # ------------------------------------------------
+
+                technologies = repository.get(
+                    "technologies",
+                    [],
+                )
+
+                if isinstance(
+                    technologies,
+                    list,
+                ):
+
+                    for technology in technologies:
+
+                        if normalize_text(
+                            technology
+                        ) == target:
+
+                            evidence_types.append(
+                                "technology"
+                            )
+
+                # ------------------------------------------------
+                # Primary language
+                # ------------------------------------------------
+
+                language = repository.get(
+                    "language",
+                    "",
+                )
+
+                if language:
+
+                    if normalize_text(
+                        language
+                    ) == target:
+
+                        evidence_types.append(
+                            "language"
+                        )
+
+                # ------------------------------------------------
+                # Language statistics
+                # ------------------------------------------------
+
+                languages = repository.get(
+                    "languages",
+                    {},
+                )
+
+                if isinstance(
+                    languages,
+                    dict,
+                ):
+
+                    for language_name in languages.keys():
+
+                        if normalize_text(
+                            language_name
+                        ) == target:
+
+                            evidence_types.append(
+                                "languages"
+                            )
+
+                if evidence_types:
+
+                    matched_repositories.append(
+                        {
+                            "name": repository.get(
+                                "name",
+                                "",
+                            ),
+                            "evidence_types": sorted(
+                                set(
+                                    evidence_types
+                                )
+                            ),
+                        }
+                    )
+
+            # ----------------------------------------------------
+            # Strong structured GitHub match
+            # ----------------------------------------------------
+
+            if matched_repositories:
+
+                evidence_lines = []
+
+                for repository in matched_repositories:
+
+                    repository_name = repository.get(
+                        "name",
+                        "",
+                    )
+
+                    evidence_types = repository.get(
+                        "evidence_types",
+                        [],
+                    )
+
+                    evidence_lines.append(
+                        (
+                            f"GitHub repository "
+                            f"'{repository_name}' "
+                            f"contains evidence for "
+                            f"'{claim_text}' through "
+                            f"{', '.join(evidence_types)}."
+                        )
+                    )
+
+                return {
+                    "source": "github",
+                    "matched": True,
+                    "confidence": 95,
+                    "evidence": " ".join(
+                        evidence_lines
+                    )[:500],
+                    "repositories": [
+                        item.get(
+                            "name",
+                            "",
+                        )
+                        for item in matched_repositories
+                    ],
+                }
+
+    # ========================================================
+    # GENERIC TEXT EVIDENCE
+    # ========================================================
 
     if not evidence_text.strip():
 
@@ -444,7 +620,7 @@ def find_matching_evidence(
         }
 
     similarity = calculate_text_similarity(
-        claim,
+        claim_text,
         evidence_text,
     )
 
@@ -454,7 +630,9 @@ def find_matching_evidence(
 
     if matched:
 
-        claim_tokens = tokenize(claim)
+        claim_tokens = tokenize(
+            claim_text
+        )
 
         sentences = re.split(
             r"[.!?\n]+",
@@ -462,7 +640,6 @@ def find_matching_evidence(
         )
 
         best_sentence = ""
-
         best_score = 0.0
 
         for sentence in sentences:
@@ -496,7 +673,6 @@ def find_matching_evidence(
             if sentence_score > best_score:
 
                 best_score = sentence_score
-
                 best_sentence = sentence
 
         evidence = best_sentence[:500]
@@ -509,7 +685,6 @@ def find_matching_evidence(
         ),
         "evidence": evidence,
     }
-
 
 # ============================================================
 # MAIN RAG VERIFICATION
@@ -579,10 +754,11 @@ def verify_claim_with_rag(
     )
 
     github_result = find_matching_evidence(
-        claim=claim_text,
-        evidence_text=github_text,
-        source_name="github",
-    )
+    claim=claim_text,
+    evidence_text=github_text,
+    source_name="github",
+    structured_evidence=github_evidence,
+)
 
     # --------------------------------------------------------
     # LinkedIn

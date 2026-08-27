@@ -25,30 +25,43 @@ def calculate_trust_score(
     # 1. CLAIM EVIDENCE - 40 POINTS
     # ========================================================
 
-    skill_claims = [
-        claim
-        for claim in claims
-        if claim.get("type") == "skill"
-    ]
+    if claims:
 
-    if skill_claims:
-
-        supported = sum(
+        supported_claims = sum(
             1
-            for claim in skill_claims
-            if claim.get("status") == "supported"
+            for claim in claims
+            if (
+                claim.get("status") == "supported"
+                or
+                claim.get("evidence", {}).get("github") is True
+                or
+                str(
+                    claim.get("rag_status", "")
+                ).lower()
+                in {
+                    "verified",
+                    "supported",
+                    "confirmed",
+                    "match",
+                    "matched",
+                    "strong",
+                }
+            )
         )
 
-        claim_ratio = supported / len(skill_claims)
+        claim_ratio = (
+            supported_claims / len(claims)
+        )
 
         claim_score = claim_ratio * 40
 
     else:
-        # If there are no skill claims, don't punish the candidate.
-        claim_score = 30
+        claim_score = 0
 
     score += claim_score
-    breakdown["claim_evidence"] = round(claim_score)
+    breakdown["claim_evidence"] = round(
+        claim_score
+    )
 
     # ========================================================
     # 2. RAG VERIFICATION - 20 POINTS
@@ -60,27 +73,44 @@ def calculate_trust_score(
         if claim.get("rag_status")
     ]
 
+    verified_statuses = {
+        "verified",
+        "supported",
+        "confirmed",
+        "match",
+        "matched",
+        "strong",
+        "true",
+    }
+
     if rag_claims:
 
         rag_verified = sum(
             1
             for claim in rag_claims
-            if claim.get("rag_status") in {
-                "verified",
-                "supported",
-                "confirmed",
-            }
+            if str(
+                claim.get(
+                    "rag_status",
+                    "",
+                )
+            ).strip().lower()
+            in verified_statuses
         )
 
-        rag_ratio = rag_verified / len(rag_claims)
-
-        rag_score = rag_ratio * 20
+        rag_score = (
+            rag_verified / len(rag_claims)
+        ) * 20
 
     else:
+        # Don't punish the candidate if RAG
+        # did not return a status.
         rag_score = 10
 
     score += rag_score
-    breakdown["rag_verification"] = round(rag_score)
+
+    breakdown["rag_verification"] = round(
+        rag_score
+    )
 
     # ========================================================
     # 3. IDENTITY VERIFICATION - 20 POINTS
@@ -89,15 +119,24 @@ def calculate_trust_score(
     identity_score = 0
 
     github_match = bool(
-        identity.get("github_match", False)
+        identity.get(
+            "github_match",
+            False,
+        )
     )
 
     linkedin_match = bool(
-        identity.get("linkedin_match", False)
+        identity.get(
+            "linkedin_match",
+            False,
+        )
     )
 
     github_found = bool(
-        github_evidence.get("profile_found", False)
+        github_evidence.get(
+            "profile_found",
+            False,
+        )
     )
 
     linkedin_authorized = bool(
@@ -107,28 +146,39 @@ def calculate_trust_score(
         )
     )
 
+    # GitHub
     if github_match:
         identity_score += 10
+
     elif github_found:
         identity_score += 5
 
-    if linkedin_match and linkedin_authorized:
-        identity_score += 10
-    elif linkedin_authorized:
+    # LinkedIn
+    if linkedin_authorized:
+
+        if linkedin_match:
+            identity_score += 10
+        else:
+            identity_score += 5
+
+    else:
+        # LinkedIn was not authorized.
+        # Do not heavily penalize the candidate.
         identity_score += 5
 
-    # If LinkedIn wasn't supplied/authorized, don't penalize
-    # the candidate for something they didn't provide.
-    if not linkedin_authorized:
-        identity_score += 5
-
-    identity_score = min(identity_score, 20)
+    identity_score = min(
+        identity_score,
+        20,
+    )
 
     score += identity_score
-    breakdown["identity_verification"] = identity_score
+
+    breakdown["identity_verification"] = (
+        identity_score
+    )
 
     # ========================================================
-    # 4. GITHUB QUALITY - 10 POINTS
+    # 4. GITHUB QUALITY - 20 POINTS
     # ========================================================
 
     github_score = 0
@@ -138,19 +188,68 @@ def calculate_trust_score(
         [],
     )
 
+    technology_evidence = github_evidence.get(
+        "technology_evidence",
+        [],
+    )
+
     if github_found:
         github_score += 5
 
     if repositories:
-        github_score += 3
+        github_score += 5
 
     if len(repositories) >= 3:
-        github_score += 2
+        github_score += 5
 
-    github_score = min(github_score, 10)
+    if technology_evidence:
+        github_score += 5
+
+    github_score = min(
+        github_score,
+        20,
+    )
 
     score += github_score
-    breakdown["github_quality"] = github_score
+
+    breakdown["github_quality"] = (
+        github_score
+    )
+
+    # ========================================================
+    # 5. STRONG EVIDENCE BONUS
+    # ========================================================
+
+    strong_evidence = 0
+
+    # Multiple GitHub repositories
+    if len(repositories) >= 3:
+        strong_evidence += 3
+
+    # Technology evidence
+    if len(technology_evidence) >= 5:
+        strong_evidence += 3
+
+    # Identity
+    if github_match:
+        strong_evidence += 2
+
+    if (
+        linkedin_authorized
+        and linkedin_match
+    ):
+        strong_evidence += 2
+
+    strong_evidence = min(
+        strong_evidence,
+        10,
+    )
+
+    score += strong_evidence
+
+    breakdown["strong_evidence_bonus"] = (
+        strong_evidence
+    )
 
     # ========================================================
     # FINAL SCORE
@@ -159,7 +258,7 @@ def calculate_trust_score(
     trust_score = clamp_score(score)
 
     # ========================================================
-    # RISK LEVEL
+    # RISK
     # ========================================================
 
     if trust_score >= 80:
@@ -175,25 +274,36 @@ def calculate_trust_score(
     # RECRUITER VERDICT
     # ========================================================
 
-    if trust_score >= 85:
+    if trust_score >= 90:
+
         recruiter_verdict = (
-            "Strong verification evidence. "
+            "Excellent verification evidence. "
             "Candidate appears highly credible."
         )
 
-    elif trust_score >= 75:
+    elif trust_score >= 80:
+
+        recruiter_verdict = (
+            "Strong verification evidence. "
+            "Candidate appears credible."
+        )
+
+    elif trust_score >= 70:
+
         recruiter_verdict = (
             "Good verification evidence. "
-            "Candidate appears credible with minor review recommended."
+            "Minor manual verification is recommended."
         )
 
     elif trust_score >= 60:
+
         recruiter_verdict = (
             "Moderate verification evidence. "
             "Manual verification recommended."
         )
 
     else:
+
         recruiter_verdict = (
             "Limited verification evidence. "
             "Additional verification required."
