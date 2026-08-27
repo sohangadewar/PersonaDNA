@@ -25,43 +25,95 @@ def calculate_trust_score(
     # 1. CLAIM EVIDENCE - 40 POINTS
     # ========================================================
 
+       # ========================================================
+    # 1. CLAIM EVIDENCE - 40 POINTS
+    # ========================================================
+
     if claims:
 
-        supported_claims = sum(
-            1
-            for claim in claims
+        supported_claims = 0.0
+
+        for claim in claims:
+
+            status = str(
+                claim.get(
+                    "status",
+                    "",
+                )
+            ).strip().lower()
+
+            rag_status = str(
+                claim.get(
+                    "rag_status",
+                    "",
+                )
+            ).strip().lower()
+
+            rag_confidence = float(
+                claim.get(
+                    "rag_confidence",
+                    0,
+                )
+                or 0
+            )
+
+            github_supported = (
+                claim.get(
+                    "evidence",
+                    {}
+                ).get(
+                    "github",
+                    False,
+                )
+                is True
+            )
+
+            # Strong direct evidence
             if (
-                claim.get("status") == "supported"
-                or
-                claim.get("evidence", {}).get("github") is True
-                or
-                str(
-                    claim.get("rag_status", "")
-                ).lower()
-                in {
+                status == "supported"
+                or rag_status in {
                     "verified",
                     "supported",
                     "confirmed",
-                    "match",
                     "matched",
+                    "match",
                     "strong",
                 }
-            )
-        )
+                or github_supported
+            ):
+                supported_claims += 1.0
+
+            # Partial RAG evidence
+            elif (
+                rag_status
+                in {
+                    "partially_supported",
+                    "partially supported",
+                }
+                and rag_confidence >= 50
+            ):
+                supported_claims += 0.5
 
         claim_ratio = (
-            supported_claims / len(claims)
+            supported_claims
+            / len(claims)
         )
 
         claim_score = claim_ratio * 40
 
     else:
+
         claim_score = 0
 
     score += claim_score
+
     breakdown["claim_evidence"] = round(
         claim_score
     )
+
+    # ========================================================
+    # 2. RAG VERIFICATION - 20 POINTS
+    # ========================================================
 
     # ========================================================
     # 2. RAG VERIFICATION - 20 POINTS
@@ -90,8 +142,7 @@ def calculate_trust_score(
 
     if rag_claims:
 
-        rag_verified = 0
-        rag_partial = 0
+        rag_points = 0.0
 
         for claim in rag_claims:
 
@@ -102,23 +153,56 @@ def calculate_trust_score(
                 )
             ).strip().lower()
 
-            if status in verified_statuses:
-                rag_verified += 1
+            try:
+                rag_confidence = float(
+                    claim.get(
+                        "rag_confidence",
+                        0,
+                    ) or 0
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                rag_confidence = 0.0
 
+            # Fully supported RAG claim
+            if status in verified_statuses:
+
+                rag_points += 1.0
+
+            # Partially supported claim
             elif status in partially_supported_statuses:
-                rag_partial += 1
+
+                rag_points += 0.75
+
+            # Resume-only / needs review
+            elif status == "needs_review":
+
+                rag_points += 0.35
+
+            # Use confidence as a secondary signal
+            # when the status itself is not decisive.
+            elif rag_confidence >= 80:
+
+                rag_points += 0.75
+
+            elif rag_confidence >= 60:
+
+                rag_points += 0.50
+
+            elif rag_confidence >= 40:
+
+                rag_points += 0.25
 
         rag_score = (
-            (
-                rag_verified
-                + (rag_partial * 0.5)
-            )
-            / len(rag_claims)
+            rag_points / len(rag_claims)
         ) * 20
 
     else:
-        # Don't punish the candidate if RAG
-        # did not return a status.
+
+        # RAG did not return claim statuses.
+        # Give a neutral score rather than zero.
         rag_score = 10
 
     score += rag_score
