@@ -42,6 +42,10 @@ from ai.candidate_intelligence import (
     build_candidate_intelligence,
 )
 
+from ai.gemini_candidate import (
+    generate_candidate_insight,
+)
+
 from ai.project_matching import (
     build_project_repository_mapping,
 )
@@ -799,6 +803,15 @@ async def analyze(
 
     )
 
+    # ========================================================
+# 19.5 GEMINI CANDIDATE INSIGHT
+# ========================================================
+
+    gemini_candidate_insight = (
+    generate_candidate_insight(
+        candidate_knowledge
+    )
+)
 
     print(
         "\n========== CANDIDATE RAG KNOWLEDGE =========="
@@ -1209,8 +1222,12 @@ async def analyze(
         "rag_verified_claims": (
             rag_verified_claims
         ),
-
+          
+        "gemini_candidate_insight": gemini_candidate_insight,
+          
         "strengths": strengths,
+        
+        
 
         "warnings": warnings,
 
