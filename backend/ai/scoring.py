@@ -2,8 +2,16 @@
 # PersonaDNA - Trust Scoring Engine
 # ============================================================
 
+
 def clamp_score(score: float) -> int:
     return max(0, min(100, round(score)))
+
+
+def safe_confidence(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def calculate_trust_score(
@@ -18,117 +26,124 @@ def calculate_trust_score(
     evidence_report = evidence_report or []
     linkedin_evidence = linkedin_evidence or {}
 
-    score = 0
+    score = 0.0
     breakdown = {}
 
     # ========================================================
     # 1. CLAIM EVIDENCE - 40 POINTS
+    #
+    # Measures actual source coverage.
+    #
+    # IMPORTANT:
+    # - Resume presence alone does NOT mean verified.
+    # - GitHub / LinkedIn provide independent corroboration.
+    # - RAG is NOT counted here.
+    # - Claim status is NOT counted here.
+    #
+    # This prevents double-counting.
     # ========================================================
 
-       # ========================================================
-    # 1. CLAIM EVIDENCE - 40 POINTS
-    # ========================================================
-
-        # ========================================================
-    # 1. CLAIM EVIDENCE - 40 POINTS
-    # ========================================================
+    claim_score = 0.0
 
     if claims:
 
-        supported_claims = 0.0
+        claim_points = 0.0
+
+        print("\n========== CLAIM SCORING DEBUG ==========")
 
         for claim in claims:
 
-            status = str(
-                claim.get(
-                    "status",
-                    "",
-                )
+            evidence = claim.get("evidence", {})
+
+            if not isinstance(evidence, dict):
+                evidence = {}
+
+            claim_type = str(
+                claim.get("type", "skill")
             ).strip().lower()
 
-            rag_status = str(
-                claim.get(
-                    "rag_status",
-                    "",
-                )
-            ).strip().lower()
-
-            try:
-                rag_confidence = float(
-                    claim.get(
-                        "rag_confidence",
-                        0,
-                    ) or 0
-                )
-            except (
-                TypeError,
-                ValueError,
-            ):
-                rag_confidence = 0.0
-
-            github_supported = (
-                claim.get(
-                    "evidence",
-                    {}
-                ).get(
-                    "github",
-                    False,
-                )
-                is True
+            resume_supported = (
+                evidence.get("resume", False) is True
             )
 
-            # ----------------------------------------------
-            # Fully supported claim
-            # ----------------------------------------------
+            github_supported = (
+                evidence.get("github", False) is True
+            )
 
-            if (
-                status in {
-                    "supported",
-                    "verified",
-                    "confirmed",
-                }
-                or github_supported
-                or rag_status in {
-                    "verified",
-                    "supported",
-                    "confirmed",
-                    "match",
-                    "matched",
-                    "strong",
-                }
-            ):
+            linkedin_supported = (
+                evidence.get("linkedin", False) is True
+            )
 
-                supported_claims += 1.0
+            # ------------------------------------------------
+            # Source weights
+            #
+            # These weights describe source coverage only.
+            # They are NOT probability of truth.
+            # ------------------------------------------------
 
-            # ----------------------------------------------
-            # Partially supported claim
-            # ----------------------------------------------
+            if claim_type == "skill":
 
-            elif (
-                rag_status in {
-                    "partially_supported",
-                    "partially supported",
-                }
-                and rag_confidence >= 50
-            ):
+                resume_weight = 0.25
+                github_weight = 0.45
+                linkedin_weight = 0.30
 
-                supported_claims += 0.75
+            elif claim_type == "education":
 
-            # ----------------------------------------------
-            # Good RAG confidence even if status differs
-            # ----------------------------------------------
+                # GitHub is not an appropriate education
+                # verification source.
+                resume_weight = 0.60
+                github_weight = 0.00
+                linkedin_weight = 0.40
 
-            elif rag_confidence >= 80:
+            elif claim_type == "certification":
 
-                supported_claims += 0.75
+                # GitHub is not an appropriate certification
+                # verification source.
+                resume_weight = 0.50
+                github_weight = 0.00
+                linkedin_weight = 0.50
 
-            elif rag_confidence >= 60:
+            else:
 
-                supported_claims += 0.50
+                resume_weight = 0.25
+                github_weight = 0.45
+                linkedin_weight = 0.30
+
+            source_strength = 0.0
+
+            if resume_supported:
+                source_strength += resume_weight
+
+            if github_supported:
+                source_strength += github_weight
+
+            if linkedin_supported:
+                source_strength += linkedin_weight
+
+            source_strength = min(
+                source_strength,
+                1.0,
+            )
+
+            claim_points += source_strength
+
+            print(
+                "CLAIM:",
+                claim.get("claim"),
+                "| type:",
+                claim_type,
+                "| source_strength:",
+                round(source_strength, 2),
+                "| resume:",
+                resume_supported,
+                "| github:",
+                github_supported,
+                "| linkedin:",
+                linkedin_supported,
+            )
 
         claim_ratio = (
-            supported_claims
-            / len(claims)
+            claim_points / len(claims)
         )
 
         claim_score = min(
@@ -136,21 +151,47 @@ def calculate_trust_score(
             40,
         )
 
-    else:
+        print("-----------------------------------------")
 
-        claim_score = 0
+        print(
+            "Claim source points:",
+            round(claim_points, 2),
+        )
+
+        print(
+            "Total claims:",
+            len(claims),
+        )
+
+        print(
+            "Claim source ratio:",
+            round(claim_ratio, 3),
+        )
+
+        print(
+            "Claim evidence score:",
+            round(claim_score, 2),
+        )
+
+        print(
+            "========================================="
+        )
 
     score += claim_score
 
     breakdown["claim_evidence"] = round(
         claim_score
     )
-    # ========================================================
-    # 2. RAG VERIFICATION - 20 POINTS
-    # ========================================================
 
     # ========================================================
     # 2. RAG VERIFICATION - 20 POINTS
+    #
+    # Measures RAG verification independently.
+    #
+    # needs_review = 0
+    #
+    # Confidence alone does NOT turn an unverified claim
+    # into verified evidence.
     # ========================================================
 
     rag_claims = [
@@ -174,9 +215,15 @@ def calculate_trust_score(
         "partially supported",
     }
 
+    rag_score = 0.0
+
     if rag_claims:
 
         rag_points = 0.0
+
+        print(
+            "\n========== RAG SCORING DEBUG =========="
+        )
 
         for claim in rag_claims:
 
@@ -187,57 +234,115 @@ def calculate_trust_score(
                 )
             ).strip().lower()
 
-            try:
-                rag_confidence = float(
-                    claim.get(
-                        "rag_confidence",
-                        0,
-                    ) or 0
+            confidence = safe_confidence(
+                claim.get(
+                    "rag_confidence",
+                    0,
                 )
-            except (
-                TypeError,
-                ValueError,
-            ):
-                rag_confidence = 0.0
+            )
 
-            # Fully supported RAG claim
+            # ------------------------------------------------
+            # Fully verified
+            # ------------------------------------------------
+
             if status in verified_statuses:
 
-                rag_points += 1.0
+                if confidence >= 80:
+                    points = 1.00
 
-            # Partially supported claim
+                elif confidence >= 60:
+                    points = 0.85
+
+                elif confidence >= 40:
+                    points = 0.70
+
+                else:
+                    points = 0.50
+
+            # ------------------------------------------------
+            # Partially verified
+            # ------------------------------------------------
+
             elif status in partially_supported_statuses:
 
-                rag_points += 0.75
+                if confidence >= 80:
+                    points = 0.75
 
-            # Resume-only / needs review
+                elif confidence >= 60:
+                    points = 0.60
+
+                elif confidence >= 50:
+                    points = 0.50
+
+                else:
+                    points = 0.25
+
+            # ------------------------------------------------
+            # Needs review
+            #
+            # IMPORTANT:
+            # This is NOT verification.
+            # ------------------------------------------------
+
             elif status == "needs_review":
 
-                rag_points += 0.35
+                points = 0.00
 
-            # Use confidence as a secondary signal
-            # when the status itself is not decisive.
-            elif rag_confidence >= 80:
+            # ------------------------------------------------
+            # Unknown status
+            # ------------------------------------------------
 
-                rag_points += 0.75
+            else:
 
-            elif rag_confidence >= 60:
+                points = 0.00
 
-                rag_points += 0.50
+            rag_points += points
 
-            elif rag_confidence >= 40:
+            print(
+                "CLAIM:",
+                claim.get("claim"),
+                "| rag_status:",
+                status,
+                "| confidence:",
+                confidence,
+                "| points:",
+                round(points, 3),
+            )
 
-                rag_points += 0.25
+        rag_score = min(
+            (
+                rag_points / len(rag_claims)
+            ) * 20,
+            20,
+        )
 
-        rag_score = (
-            rag_points / len(rag_claims)
-        ) * 20
+        print(
+            "--------------------------------------"
+        )
+
+        print(
+            "RAG points:",
+            round(rag_points, 3),
+        )
+
+        print(
+            "RAG claims:",
+            len(rag_claims),
+        )
+
+        print(
+            "RAG score:",
+            round(rag_score, 2),
+        )
+
+        print(
+            "======================================"
+        )
 
     else:
 
-        # RAG did not return claim statuses.
-        # Give a neutral score rather than zero.
-        rag_score = 10
+        # No RAG verification.
+        rag_score = 0.0
 
     score += rag_score
 
@@ -279,24 +384,36 @@ def calculate_trust_score(
         )
     )
 
-    # GitHub
+    # --------------------------------------------------------
+    # GitHub identity
+    # --------------------------------------------------------
+
     if github_match:
+
         identity_score += 10
 
     elif github_found:
+
         identity_score += 5
 
-    # LinkedIn
+    # --------------------------------------------------------
+    # LinkedIn identity
+    # --------------------------------------------------------
+
     if linkedin_authorized:
 
         if linkedin_match:
+
             identity_score += 10
+
         else:
+
             identity_score += 5
 
     else:
-        # LinkedIn was not authorized.
-        # Do not heavily penalize the candidate.
+
+        # No LinkedIn authorization is not treated as
+        # negative evidence.
         identity_score += 5
 
     identity_score = min(
@@ -312,6 +429,10 @@ def calculate_trust_score(
 
     # ========================================================
     # 4. GITHUB QUALITY - 20 POINTS
+    #
+    # Measures quality/availability of the GitHub source.
+    #
+    # It does NOT directly verify every resume claim.
     # ========================================================
 
     github_score = 0
@@ -326,16 +447,40 @@ def calculate_trust_score(
         [],
     )
 
+    if not isinstance(
+        repositories,
+        list,
+    ):
+        repositories = []
+
+    if not isinstance(
+        technology_evidence,
+        list,
+    ):
+        technology_evidence = []
+
+    # GitHub profile exists
+
     if github_found:
+
         github_score += 5
+
+    # At least one repository
 
     if repositories:
+
         github_score += 5
+
+    # Meaningful repository count
 
     if len(repositories) >= 3:
+
         github_score += 5
 
+    # Technology evidence exists
+
     if technology_evidence:
+
         github_score += 5
 
     github_score = min(
@@ -351,56 +496,51 @@ def calculate_trust_score(
 
     # ========================================================
     # 5. STRONG EVIDENCE BONUS
+    #
+    # REMOVED FROM SCORE.
+    #
+    # GitHub quality and identity are already represented
+    # above. Adding another bonus would double-count them.
+    #
+    # Field retained as 0 for API/frontend compatibility.
     # ========================================================
 
     strong_evidence = 0
 
-    # Multiple GitHub repositories
-    if len(repositories) >= 3:
-        strong_evidence += 3
-
-    # Technology evidence
-    if len(technology_evidence) >= 5:
-        strong_evidence += 3
-
-    # Identity
-    if github_match:
-        strong_evidence += 2
-
-    if (
-        linkedin_authorized
-        and linkedin_match
-    ):
-        strong_evidence += 2
-
-    strong_evidence = min(
-        strong_evidence,
-        10,
-    )
-
-    score += strong_evidence
-
-    breakdown["strong_evidence_bonus"] = (
-        strong_evidence
-    )
+    breakdown["strong_evidence_bonus"] = 0
 
     # ========================================================
     # FINAL SCORE
+    #
+    # Maximum:
+    #
+    # Claim Evidence       = 40
+    # RAG Verification     = 20
+    # Identity Verification = 20
+    # GitHub Quality       = 20
+    # Strong Evidence      =  0
+    #
+    # TOTAL                = 100
     # ========================================================
 
-    trust_score = clamp_score(score)
+    trust_score = clamp_score(
+        score
+    )
 
     # ========================================================
     # RISK
     # ========================================================
 
     if trust_score >= 80:
+
         risk_level = "Low"
 
     elif trust_score >= 60:
+
         risk_level = "Medium"
 
     else:
+
         risk_level = "High"
 
     # ========================================================
@@ -441,6 +581,72 @@ def calculate_trust_score(
             "Limited verification evidence. "
             "Additional verification required."
         )
+
+    # ========================================================
+    # FINAL DEBUG
+    # ========================================================
+
+    print(
+        "\n========== PERSONADNA FINAL SCORE =========="
+    )
+
+    print(
+        "Claim evidence:",
+        round(claim_score),
+        "/ 40",
+    )
+
+    print(
+        "RAG verification:",
+        round(rag_score),
+        "/ 20",
+    )
+
+    print(
+        "Identity verification:",
+        identity_score,
+        "/ 20",
+    )
+
+    print(
+        "GitHub quality:",
+        github_score,
+        "/ 20",
+    )
+
+    print(
+        "Strong evidence bonus:",
+        strong_evidence,
+        "/ 0",
+    )
+
+    print(
+        "--------------------------------------------"
+    )
+
+    print(
+        "RAW SCORE:",
+        round(score, 2),
+    )
+
+    print(
+        "FINAL TRUST SCORE:",
+        trust_score,
+        "/ 100",
+    )
+
+    print(
+        "RISK LEVEL:",
+        risk_level,
+    )
+
+    print(
+        "============================================"
+    )
+
+    # ========================================================
+    # RETURN
+    # ========================================================
 
     return {
         "trust_score": trust_score,

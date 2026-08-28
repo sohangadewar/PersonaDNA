@@ -19,16 +19,30 @@ def extract_github_username(github_url: str) -> str:
     if not github_url:
         return ""
 
+    # Remove accidental Markdown/code formatting characters
+    github_url = str(github_url).strip().strip("`").strip()
+
     if not github_url.startswith(("http://", "https://")):
         github_url = "https://" + github_url
 
     parsed = urlparse(github_url)
+
+    # Only accept github.com
+    if parsed.netloc.lower() not in {
+        "github.com",
+        "www.github.com",
+    }:
+        return ""
+
     path = parsed.path.strip("/")
 
     if not path:
         return ""
 
-    return path.split("/")[0]
+    # Remove accidental trailing formatting characters
+    username = path.split("/")[0].strip().strip("`").strip()
+
+    return username
 
 
 # ============================================================

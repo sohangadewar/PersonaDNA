@@ -1,4 +1,4 @@
-from ai.gemini_engine import generate_with_gemini
+from backend.ai.gemini_engine import generate_with_gemini
 
 
 def generate_candidate_insight(candidate_knowledge: str) -> str:

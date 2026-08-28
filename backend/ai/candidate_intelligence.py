@@ -1,4 +1,4 @@
-from ai.rag_engine import verify_claim_with_rag
+from backend.ai.rag_engine import verify_claim_with_rag
 import json
 
 def normalize_text(value) -> str:

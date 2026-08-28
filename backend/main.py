@@ -9,48 +9,109 @@ from fastapi.responses import RedirectResponse
 from io import BytesIO
 import json
 
+
 from pypdf import PdfReader
 
-from ai.claims import extract_claims
-from ai.identity import extract_resume_name, compare_identity
-from ai.scoring import calculate_trust_score
-from ai.github import analyze_github
-from ai.confidence import calculate_confidence
 
-from ai.evidence import (
+# ============================================================
+# CORE ANALYSIS MODULES
+# ============================================================
+
+from backend.ai.claims import (
+    extract_claims,
+)
+
+from backend.ai.identity import (
+    extract_resume_name,
+    compare_identity,
+)
+
+from backend.ai.scoring import (
+    calculate_trust_score,
+)
+
+from backend.ai.github import (
+    analyze_github,
+)
+
+from backend.ai.confidence import (
+    calculate_confidence,
+)
+
+
+# ============================================================
+# EVIDENCE
+# ============================================================
+
+from backend.ai.evidence import (
     build_evidence_report,
     enrich_claims_with_github,
     calculate_claim_stats,
 )
 
-from ai.linkedin import (
+
+# ============================================================
+# LINKEDIN
+# ============================================================
+
+from backend.ai.linkedin import (
     analyze_linkedin_evidence,
     enrich_claims_with_linkedin,
     build_linkedin_summary,
 )
 
-from ai.risk_engine import (
+
+# ============================================================
+# RISK ENGINE
+# ============================================================
+
+from backend.ai.risk_engine import (
     build_risk_report,
     calculate_risk_summary,
 )
 
-from ai.skill_mapping import (
+
+# ============================================================
+# SKILL MAPPING
+# ============================================================
+
+from backend.ai.skill_mapping import (
     build_skill_repository_mapping,
 )
 
-from ai.candidate_intelligence import (
+
+# ============================================================
+# CANDIDATE INTELLIGENCE
+# ============================================================
+
+from backend.ai.candidate_intelligence import (
     build_candidate_intelligence,
 )
 
-from ai.gemini_candidate import (
+
+# ============================================================
+# GEMINI CANDIDATE INSIGHT
+# ============================================================
+
+from backend.ai.gemini_candidate import (
     generate_candidate_insight,
 )
 
-from ai.project_matching import (
+
+# ============================================================
+# PROJECT MATCHING
+# ============================================================
+
+from backend.ai.project_matching import (
     build_project_repository_mapping,
 )
 
-from ai.linkedin_oauth import (
+
+# ============================================================
+# LINKEDIN OAUTH
+# ============================================================
+
+from backend.ai.linkedin_oauth import (
     build_linkedin_authorization_url,
     validate_oauth_state,
     exchange_code_for_token,
@@ -59,16 +120,38 @@ from ai.linkedin_oauth import (
     consume_oauth_result,
 )
 
-from ai.rag import (
+
+# ============================================================
+# RAG KNOWLEDGE LAYER
+#
+# IMPORTANT:
+# build_candidate_knowledge remains in rag.py.
+# ============================================================
+
+from backend.ai.rag import (
     build_candidate_knowledge,
+)
+
+
+# ============================================================
+# RAG ENGINE
+#
+# IMPORTANT:
+# These functions belong to the retrieval / verification layer.
+# ============================================================
+
+from backend.ai.rag_engine import (
+    verify_claim_with_rag,
+    retrieve_candidate_evidence,
     build_recruiter_prompt,
 )
 
-from ai.rag_engine import (
-    verify_claim_with_rag,
-)
 
-from ai.jarvis_controller import (
+# ============================================================
+# JARVIS
+# ============================================================
+
+from backend.ai.jarvis_controller import (
     process_jarvis_command,
 )
 
@@ -77,7 +160,9 @@ from ai.jarvis_controller import (
 # APP
 # ============================================================
 
-app = FastAPI(title="PersonaDNA API")
+app = FastAPI(
+    title="PersonaDNA API",
+)
 
 
 # ============================================================
@@ -163,7 +248,9 @@ COMMON_SKILLS = [
 ]
 
 
-def extract_skills(resume_text: str) -> list[str]:
+def extract_skills(
+    resume_text: str,
+) -> list[str]:
 
     text = resume_text.lower()
 
@@ -172,6 +259,7 @@ def extract_skills(resume_text: str) -> list[str]:
     for skill in COMMON_SKILLS:
 
         if skill.lower() in text:
+
             found_skills.append(skill)
 
     return found_skills
@@ -185,7 +273,7 @@ def extract_skills(resume_text: str) -> list[str]:
 def root():
 
     return {
-        "message": "Welcome to PersonaDNA API 🚀",
+        "message": "Welcome to PersonaDNA API",
         "rag_enabled": True,
         "jarvis_enabled": True,
     }
@@ -197,12 +285,10 @@ def root():
 
 @app.post("/analyze")
 async def analyze(
-
     resume: UploadFile = File(...),
     github: str = Form(""),
     linkedin: str = Form(""),
     linkedin_profile: str = Form(""),
-
 ):
 
     print("\n")
@@ -225,7 +311,10 @@ async def analyze(
                 linkedin_profile
             )
 
-            if isinstance(parsed_linkedin, dict):
+            if isinstance(
+                parsed_linkedin,
+                dict,
+            ):
 
                 if isinstance(
                     parsed_linkedin.get("linkedin"),
@@ -255,17 +344,12 @@ async def analyze(
     # ========================================================
 
     linkedin_evidence = analyze_linkedin_evidence(
-
         linkedin_url=linkedin,
-
         profile_data=linkedin_profile_data,
-
         consent_granted=bool(
             linkedin_profile_data
         ),
-
     )
-
 
     print("\n========== LINKEDIN DEBUG ==========")
 
@@ -303,11 +387,8 @@ async def analyze(
     if resume.content_type != "application/pdf":
 
         raise HTTPException(
-
             status_code=400,
-
             detail="Please upload a PDF resume.",
-
         )
 
 
@@ -336,11 +417,8 @@ async def analyze(
     except Exception as exc:
 
         raise HTTPException(
-
             status_code=400,
-
             detail="Could not read the uploaded PDF.",
-
         ) from exc
 
 
@@ -351,13 +429,8 @@ async def analyze(
     if not resume_text.strip():
 
         raise HTTPException(
-
             status_code=400,
-
-            detail=(
-                "The PDF does not contain readable text."
-            ),
-
+            detail="The PDF does not contain readable text.",
         )
 
 
@@ -376,7 +449,6 @@ async def analyze(
     skills = extract_skills(
         resume_text
     )
-
 
     print("\n========== RESUME DEBUG ==========")
 
@@ -400,10 +472,22 @@ async def analyze(
     # 7. GITHUB ANALYSIS
     # ========================================================
 
+    github = (
+        str(github or "")
+        .strip()
+        .strip("`\"'")
+    )
+
+    print("\n========== GITHUB INPUT DEBUG ==========")
+
+    print(
+        "Raw/Cleaned GitHub URL:",
+        repr(github),
+    )
+
     github_evidence = analyze_github(
         github
     )
-
 
     print("\n========== GITHUB DEBUG ==========")
 
@@ -449,60 +533,45 @@ async def analyze(
     ):
 
         linkedin_identity_name = str(
-
             linkedin_profile_data.get(
                 "name",
                 "",
             )
-
         ).strip()
-
 
         if not linkedin_identity_name:
 
             first_name = str(
-
                 linkedin_profile_data.get(
                     "first_name",
                     "",
                 )
-
             ).strip()
 
-
             last_name = str(
-
                 linkedin_profile_data.get(
                     "last_name",
                     "",
                 )
-
             ).strip()
 
-
             linkedin_identity_name = " ".join(
-
                 part
-
                 for part in (
                     first_name,
                     last_name,
                 )
-
                 if part
-
             ).strip()
 
 
     if not linkedin_identity_name:
 
         linkedin_identity_name = str(
-
             linkedin_evidence.get(
                 "display_name",
                 "",
             )
-
         ).strip()
 
 
@@ -517,20 +586,14 @@ async def analyze(
     # ========================================================
 
     identity = compare_identity(
-
         resume_name=resume_name,
-
         github=github,
-
         linkedin=linkedin_identity_name,
-
         github_display_name=github_evidence.get(
             "display_name",
             "",
         ),
-
     )
-
 
     print("\n========== IDENTITY DEBUG ==========")
 
@@ -556,90 +619,90 @@ async def analyze(
     # ========================================================
 
     claims = enrich_claims_with_github(
-
         claims,
-
         github_evidence,
-
     )
 
-
     claims = enrich_claims_with_linkedin(
-
         claims,
-
         linkedin_evidence,
-
     )
 
 
     # ========================================================
     # 11. RAG CLAIM VERIFICATION
+    #
+    # IMPORTANT:
+    # RAG verification happens AFTER all external evidence
+    # has been collected.
     # ========================================================
 
-    print(
-        "\n========== RAG VERIFICATION =========="
-    )
+    print("\n========== RAG VERIFICATION ==========")
 
     for claim in claims:
+
+        claim_text = str(
+            claim.get(
+                "claim",
+                "",
+            )
+        ).strip()
+
+        if not claim_text:
+
+            claim["rag_status"] = "needs_review"
+            claim["rag_confidence"] = 0
+            claim["rag_evidence"] = []
+            claim["rag_sources"] = []
+
+            continue
 
         try:
 
             result = verify_claim_with_rag(
-
-                claim=claim.get(
-                    "claim",
-                    "",
-                ),
-
+                claim=claim_text,
                 resume_text=resume_text,
-
                 github_evidence=github_evidence,
-
                 linkedin_evidence=linkedin_evidence,
-
             )
 
+            if not isinstance(
+                result,
+                dict,
+            ):
+
+                result = {}
 
             claim["rag_status"] = result.get(
                 "status",
                 "needs_review",
             )
 
-
             claim["rag_confidence"] = result.get(
                 "confidence",
                 0,
             )
-
 
             claim["rag_evidence"] = result.get(
                 "evidence",
                 [],
             )
 
-
             claim["rag_sources"] = result.get(
                 "sources",
                 [],
             )
 
-
         except Exception as exc:
 
             print(
                 "RAG verification error:",
-                exc,
+                repr(exc),
             )
 
-            claim["rag_status"] = (
-                "needs_review"
-            )
-
+            claim["rag_status"] = "needs_review"
             claim["rag_confidence"] = 0
-
             claim["rag_evidence"] = []
-
             claim["rag_sources"] = []
 
 
@@ -664,7 +727,6 @@ async def analyze(
     claim_stats = calculate_claim_stats(
         claims
     )
-
 
     print("\n========== CLAIM STATS ==========")
 
@@ -698,11 +760,8 @@ async def analyze(
     # ========================================================
 
     evidence_report = build_evidence_report(
-
         claims,
-
         github_evidence,
-
     )
 
 
@@ -711,15 +770,10 @@ async def analyze(
     # ========================================================
 
     risk_report = build_risk_report(
-
         claims,
-
         evidence_report,
-
         identity,
-
     )
-
 
     risk_summary = calculate_risk_summary(
         risk_report
@@ -732,11 +786,8 @@ async def analyze(
 
     skill_repository_mapping = (
         build_skill_repository_mapping(
-
             claims,
-
             github_evidence,
-
         )
     )
 
@@ -747,15 +798,10 @@ async def analyze(
 
     candidate_intelligence = (
         build_candidate_intelligence(
-
             claims=claims,
-
             github_evidence=github_evidence,
-
             identity=identity,
-
             resume_text=resume_text,
-
         )
     )
 
@@ -766,52 +812,31 @@ async def analyze(
 
     project_repository_mapping = (
         build_project_repository_mapping(
-
             claims,
-
             github_evidence,
-
         )
     )
 
 
     # ========================================================
-    # 19. CANDIDATE RAG KNOWLEDGE
+    # 19. CANDIDATE KNOWLEDGE
+    #
+    # IMPORTANT:
+    # This is the actual knowledge base used by RAG.
     # ========================================================
 
-    candidate_knowledge = build_candidate_knowledge(
-
-        resume_text=resume_text,
-
-        claims=claims,
-
-        github_evidence=github_evidence,
-
-        linkedin_evidence=linkedin_evidence,
-
-        candidate_intelligence=candidate_intelligence,
-
-        skill_repository_mapping=(
-            skill_repository_mapping
-        ),
-
-        project_repository_mapping=(
-            project_repository_mapping
-        ),
-
-        identity=identity,
-
+    candidate_knowledge = (
+        build_candidate_knowledge(
+            resume_text=resume_text,
+            claims=claims,
+            github_evidence=github_evidence,
+            linkedin_evidence=linkedin_evidence,
+            candidate_intelligence=candidate_intelligence,
+            skill_repository_mapping=skill_repository_mapping,
+            project_repository_mapping=project_repository_mapping,
+            identity=identity,
+        )
     )
-
-    # ========================================================
-# 19.5 GEMINI CANDIDATE INSIGHT
-# ========================================================
-
-    gemini_candidate_insight = (
-    generate_candidate_insight(
-        candidate_knowledge
-    )
-)
 
     print(
         "\n========== CANDIDATE RAG KNOWLEDGE =========="
@@ -819,8 +844,123 @@ async def analyze(
 
     print(
         "Knowledge characters:",
-        len(candidate_knowledge),
+        len(candidate_knowledge)
+        if isinstance(candidate_knowledge, str)
+        else "structured",
     )
+
+
+    # ========================================================
+    # 19.5 RETRIEVAL SANITY CHECK
+    #
+    # This makes sure the candidate knowledge can actually be
+    # searched before recruiter questions are answered.
+    # ========================================================
+
+    rag_retrieval_status = {
+        "enabled": True,
+        "candidate_knowledge_available": bool(
+            candidate_knowledge
+        ),
+        "retrieval_tested": False,
+    }
+
+    try:
+
+        if isinstance(
+            candidate_knowledge,
+            str,
+        ) and candidate_knowledge.strip():
+
+            retrieval_test = retrieve_candidate_evidence(
+                query="candidate skills experience projects",
+                candidate_knowledge=candidate_knowledge,
+            )
+
+            rag_retrieval_status["retrieval_tested"] = True
+
+            if isinstance(
+                retrieval_test,
+                dict,
+            ):
+
+                rag_retrieval_status[
+                    "retrieved_chunks"
+                ] = len(
+                    retrieval_test.get(
+                        "evidence",
+                        retrieval_test.get(
+                            "chunks",
+                            [],
+                        ),
+                    )
+                    or []
+                )
+
+            elif isinstance(
+                retrieval_test,
+                list,
+            ):
+
+                rag_retrieval_status[
+                    "retrieved_chunks"
+                ] = len(
+                    retrieval_test
+                )
+
+    except Exception as exc:
+
+        print(
+            "RAG retrieval sanity check failed:",
+            repr(exc),
+        )
+
+        rag_retrieval_status[
+            "retrieval_error"
+        ] = str(exc)
+
+
+    # ========================================================
+    # 19.6 GEMINI CANDIDATE INSIGHT
+    # ========================================================
+
+    try:
+
+        gemini_candidate_insight = (
+            generate_candidate_insight(
+                candidate_knowledge
+            )
+        )
+
+    except Exception as exc:
+
+        print(
+            "\n========== GEMINI WARNING =========="
+        )
+
+        print(
+            "Gemini candidate insight unavailable:"
+        )
+
+        print(
+            repr(exc)
+        )
+
+        print(
+            "Continuing analysis without Gemini insight."
+        )
+
+        print(
+            "===================================="
+        )
+
+        gemini_candidate_insight = {
+            "status": "unavailable",
+            "reason": (
+                "Gemini API quota exhausted "
+                "or temporarily unavailable."
+            ),
+        }
 
 
     # ========================================================
@@ -828,15 +968,12 @@ async def analyze(
     # ========================================================
 
     scoring = calculate_trust_score(
-    identity=identity,
-    github_evidence=github_evidence,
-    claims=claims,
-    evidence_report=evidence_report,
-    linkedin_evidence=linkedin_evidence,
-
-
+        identity=identity,
+        github_evidence=github_evidence,
+        claims=claims,
+        evidence_report=evidence_report,
+        linkedin_evidence=linkedin_evidence,
     )
-
 
     print("\n========== TRUST SCORE ==========")
 
@@ -862,11 +999,8 @@ async def analyze(
     # ========================================================
 
     verified_claims = claim_stats.get(
-
         "supported",
-
         0,
-
     )
 
 
@@ -875,17 +1009,11 @@ async def analyze(
     # ========================================================
 
     ai_confidence = calculate_confidence(
-
         resume_text,
-
         claims,
-
         github_evidence,
-
         linkedin,
-
     )
-
 
     if isinstance(
         ai_confidence,
@@ -893,15 +1021,10 @@ async def analyze(
     ):
 
         ai_confidence = (
-
             ai_confidence[0]
-
             if ai_confidence
-
             else 0
-
         )
-
 
     if isinstance(
         ai_confidence,
@@ -913,11 +1036,12 @@ async def analyze(
             0,
         )
 
-
     try:
 
         ai_confidence = int(
-            float(ai_confidence)
+            float(
+                ai_confidence
+            )
         )
 
     except (
@@ -927,16 +1051,12 @@ async def analyze(
 
         ai_confidence = 0
 
-
     ai_confidence = min(
-
         100,
-
         max(
             0,
             ai_confidence,
         ),
-
     )
 
 
@@ -947,12 +1067,9 @@ async def analyze(
     strengths = []
 
     strengths.append(
-
         f"Resume successfully extracted with "
         f"{len(resume_text)} characters of readable text."
-
     )
-
 
     if github_evidence.get(
         "profile_found",
@@ -960,13 +1077,10 @@ async def analyze(
     ):
 
         strengths.append(
-
             f"GitHub profile found with "
             f"{github_evidence.get('repository_count', 0)} "
             f"public repositories."
-
         )
-
 
     if identity.get(
         "github_match",
@@ -977,7 +1091,6 @@ async def analyze(
             "GitHub identity is consistent with the resume."
         )
 
-
     if identity.get(
         "linkedin_match",
         False,
@@ -987,7 +1100,6 @@ async def analyze(
             "LinkedIn identity is consistent with the resume."
         )
 
-
     technology_evidence = (
         github_evidence.get(
             "technology_evidence",
@@ -995,14 +1107,11 @@ async def analyze(
         )
     )
 
-
     if technology_evidence:
 
         strengths.append(
-
             f"GitHub repositories provide evidence "
             f"for {len(technology_evidence)} technologies."
-
         )
 
 
@@ -1012,61 +1121,45 @@ async def analyze(
 
     warnings = []
 
-
     if not identity.get(
         "github_match",
         False,
     ):
 
         warnings.append(
-
             "GitHub identity does not match "
             "the name detected in the resume."
-
         )
 
-
     if (
-
         linkedin_evidence.get(
             "authorized_source",
             False,
         )
-
         and not identity.get(
             "linkedin_match",
             False,
         )
-
     ):
 
         warnings.append(
-
             "LinkedIn identity does not match "
             "the name detected in the resume."
-
         )
 
-
     if (
-
         linkedin
-
         and not linkedin_evidence.get(
             "authorized_source",
             False,
         )
-
     ):
 
         warnings.append(
-
             "LinkedIn profile was supplied, "
             "but authorized LinkedIn evidence "
             "is not available."
-
         )
-
 
     if not github_evidence.get(
         "profile_found",
@@ -1077,17 +1170,17 @@ async def analyze(
             "GitHub profile could not be verified."
         )
 
-
-    if claim_stats.get(
-        "needs_review",
-        0,
-    ) > 0:
+    if (
+        claim_stats.get(
+            "needs_review",
+            0,
+        )
+        > 0
+    ):
 
         warnings.append(
-
             f"{claim_stats['needs_review']} "
             f"skill claims require additional evidence."
-
         )
 
 
@@ -1096,17 +1189,14 @@ async def analyze(
     # ========================================================
 
     linkedin_verified = (
-
         linkedin_evidence.get(
             "authorized_source",
             False,
         )
-
         and identity.get(
             "linkedin_match",
             False,
         )
-
     )
 
 
@@ -1116,37 +1206,32 @@ async def analyze(
 
     rag_verified_claims = []
 
-
     for claim in claims:
 
-        rag_verified_claims.append({
-
-            "claim": claim.get(
-                "claim",
-                "",
-            ),
-
-            "status": claim.get(
-                "rag_status",
-                "needs_review",
-            ),
-
-            "confidence": claim.get(
-                "rag_confidence",
-                0,
-            ),
-
-            "evidence": claim.get(
-                "rag_evidence",
-                [],
-            ),
-
-            "sources": claim.get(
-                "rag_sources",
-                [],
-            ),
-
-        })
+        rag_verified_claims.append(
+            {
+                "claim": claim.get(
+                    "claim",
+                    "",
+                ),
+                "status": claim.get(
+                    "rag_status",
+                    "needs_review",
+                ),
+                "confidence": claim.get(
+                    "rag_confidence",
+                    0,
+                ),
+                "evidence": claim.get(
+                    "rag_evidence",
+                    [],
+                ),
+                "sources": claim.get(
+                    "rag_sources",
+                    [],
+                ),
+            }
+        )
 
 
     # ========================================================
@@ -1154,7 +1239,6 @@ async def analyze(
     # ========================================================
 
     return {
-
         "trust_score": scoring.get(
             "trust_score",
             0,
@@ -1217,19 +1301,25 @@ async def analyze(
             project_repository_mapping
         ),
 
-        "candidate_knowledge": candidate_knowledge,
+        "candidate_knowledge": (
+            candidate_knowledge
+        ),
 
         "rag_enabled": True,
+
+        "rag_retrieval": (
+            rag_retrieval_status
+        ),
 
         "rag_verified_claims": (
             rag_verified_claims
         ),
-          
-        "gemini_candidate_insight": gemini_candidate_insight,
-          
+
+        "gemini_candidate_insight": (
+            gemini_candidate_insight
+        ),
+
         "strengths": strengths,
-        
-        
 
         "warnings": warnings,
 
@@ -1239,8 +1329,9 @@ async def analyze(
             resume_text
         ),
 
-        "resume_preview": resume_text[:2000],
-
+        "resume_preview": (
+            resume_text[:2000]
+        ),
     }
 
 
@@ -1250,11 +1341,8 @@ async def analyze(
 
 @app.post("/jarvis")
 async def jarvis_command(
-
     command: str = Form(...),
-
     analysis_result: str = Form("{}"),
-
 ):
 
     try:
@@ -1270,36 +1358,24 @@ async def jarvis_command(
 
         candidate_data = {}
 
-
     try:
 
         response = process_jarvis_command(
-
             command=command,
-
             analysis_result=candidate_data,
-
         )
 
     except TypeError:
 
         response = process_jarvis_command(
-
             command,
-
             candidate_data,
-
         )
 
-
     return {
-
         "command": command,
-
         "response": response,
-
         "rag_enabled": True,
-
     }
 
 
@@ -1327,11 +1403,8 @@ def linkedin_connect():
     except Exception as exc:
 
         raise HTTPException(
-
             status_code=500,
-
             detail=str(exc),
-
         ) from exc
 
 
@@ -1341,61 +1414,41 @@ def linkedin_connect():
 
 @app.get("/linkedin/callback")
 def linkedin_callback(
-
     code: str = "",
-
     state: str = "",
-
     error: str = "",
-
     error_description: str = "",
-
 ):
 
     print(
         "\n========== LINKEDIN CALLBACK =========="
     )
 
-
     if error:
 
         raise HTTPException(
-
             status_code=400,
-
             detail=(
-                f"LinkedIn authorization failed: "
+                "LinkedIn authorization failed: "
                 f"{error_description or error}"
             ),
-
         )
-
 
     if not code:
 
         raise HTTPException(
-
             status_code=400,
-
             detail=(
                 "LinkedIn authorization code is missing."
             ),
-
         )
-
 
     if not validate_oauth_state(state):
 
         raise HTTPException(
-
             status_code=400,
-
-            detail=(
-                "Invalid or expired OAuth state."
-            ),
-
+            detail="Invalid or expired OAuth state.",
         )
-
 
     try:
 
@@ -1403,22 +1456,16 @@ def linkedin_callback(
             code
         )
 
-
         access_token = token_data.get(
             "access_token",
             "",
         )
 
-
         if not access_token:
 
             raise RuntimeError(
-
-                "LinkedIn did not return "
-                "an access token."
-
+                "LinkedIn did not return an access token."
             )
-
 
         linkedin_data = (
             fetch_authorized_linkedin_data(
@@ -1426,37 +1473,30 @@ def linkedin_callback(
             )
         )
 
-
         print(
             "LinkedIn authorized data received."
         )
-
 
         result_code = create_oauth_result(
             linkedin_data
         )
 
-
         frontend_url = (
             "https://personadna-1.onrender.com"
         )
-
 
         redirect_url = (
             f"{frontend_url}"
             f"?linkedin_result={result_code}"
         )
 
-
         print(
             "Redirecting to frontend."
         )
 
-
         return RedirectResponse(
             url=redirect_url
         )
-
 
     except Exception as exc:
 
@@ -1465,13 +1505,9 @@ def linkedin_callback(
             str(exc),
         )
 
-
         raise HTTPException(
-
             status_code=500,
-
             detail=str(exc),
-
         ) from exc
 
 
@@ -1481,57 +1517,41 @@ def linkedin_callback(
 
 @app.get("/linkedin/result")
 def linkedin_result(
-
     code: str = "",
-
 ):
 
     if not code:
 
         raise HTTPException(
-
             status_code=400,
-
             detail=(
                 "LinkedIn result code is missing."
             ),
-
         )
-
 
     linkedin_data = consume_oauth_result(
         code
     )
 
-
     if not linkedin_data:
 
         raise HTTPException(
-
             status_code=400,
-
             detail=(
                 "LinkedIn result is invalid "
                 "or has already been used."
             ),
-
         )
-
 
     print(
         "\n========== LINKEDIN RESULT =========="
     )
 
-
     print(
         "LinkedIn result successfully consumed."
     )
 
-
     return {
-
         "code": code,
-
         "linkedin": linkedin_data,
-
     }
