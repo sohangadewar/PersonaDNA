@@ -1,6 +1,10 @@
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(dotenv_path=ENV_FILE)
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -143,7 +147,7 @@ from backend.ai.rag import (
 from backend.ai.rag_engine import (
     verify_claim_with_rag,
     retrieve_candidate_evidence,
-    build_recruiter_prompt,
+    
 )
 
 
@@ -488,6 +492,31 @@ async def analyze(
     github_evidence = analyze_github(
         github
     )
+    print("\n========== GITHUB EVIDENCE RAG DEBUG ==========")
+    print(
+        "profile_found:",
+        github_evidence.get("profile_found")
+    )
+    print(
+        "repository_count:",
+        github_evidence.get("repository_count")
+    )
+    print(
+        "repositories:",
+        len(github_evidence.get("repositories", []))
+    )
+    print(
+        "technology_evidence:",
+        len(github_evidence.get("technology_evidence", []))
+    )
+    print(
+        "skill_evidence:",
+        len(github_evidence.get("skill_evidence", []))
+    )
+    print(
+        "github_evidence keys:",
+        list(github_evidence.keys())
+    )
 
     print("\n========== GITHUB DEBUG ==========")
 
@@ -693,6 +722,94 @@ async def analyze(
                 [],
             )
 
+            # ------------------------------------------------
+            # Apply RAG verification to final claim status
+            # ------------------------------------------------
+
+            rag_status = str(
+                claim.get(
+                    "rag_status",
+                    "needs_review",
+                )
+            ).lower().strip()
+
+            rag_confidence = int(
+                claim.get(
+                    "rag_confidence",
+                    0,
+                ) or 0
+            )
+
+            if (
+                rag_status == "supported"
+                and rag_confidence >= 90
+            ):
+                claim["status"] = "supported"
+
+            elif rag_status == "partially_supported":
+                claim["status"] = "needs_review"
+
+            # ------------------------------------------------
+            # Direct authorized certification verification
+            #
+            # A matching authorized LinkedIn certification
+            # is sufficient external evidence.
+            #
+            # Credential ID / URL is NOT required.
+            # ------------------------------------------------
+
+            if (
+                claim.get("type") == "certification"
+                and claim.get(
+                    "evidence",
+                    {},
+                ).get(
+                    "linkedin",
+                    False,
+                )
+            ):
+
+                claim["status"] = "supported"
+
+                claim["rag_status"] = "supported"
+
+                claim["rag_confidence"] = max(
+                    claim.get(
+                        "rag_confidence",
+                        0,
+                    ),
+                    90,
+                )
+
+                claim.setdefault(
+                    "rag_evidence",
+                    [],
+                )
+
+                claim["rag_evidence"].append(
+                    {
+                        "source": "linkedin_authorized_api",
+                        "text": (
+                            "Certification title matched "
+                            "against authorized LinkedIn "
+                            "certification data."
+                        ),
+                        "confidence": 90,
+                    }
+                )
+
+                claim["rag_sources"] = list(
+                    dict.fromkeys(
+                        claim.get(
+                            "rag_sources",
+                            [],
+                        )
+                        + [
+                            "linkedin_authorized_api"
+                        ]
+                    )
+                )
+
         except Exception as exc:
 
             print(
@@ -719,6 +836,18 @@ async def analyze(
         linkedin_evidence
     )
 
+    print("\n========== ALL CLAIMS ==========")
+
+    for i, claim in enumerate(claims, 1):
+        print(
+            f"{i}. {claim.get('claim')} | "
+            f"TYPE: {claim.get('type')} | "
+            f"STATUS: {claim.get('status')} | "
+            f"EVIDENCE: {claim.get('evidence')}"
+        )
+
+    print("========== END ALL CLAIMS ==========\n")
+
 
     # ========================================================
     # 13. CLAIM STATS
@@ -728,32 +857,51 @@ async def analyze(
         claims
     )
 
-    print("\n========== CLAIM STATS ==========")
+    print("\n========== ALL CLAIMS ==========")
+
+    for i, claim in enumerate(claims, 1):
+        print(
+            f"{i}. {claim.get('claim')} | "
+            f"TYPE: {claim.get('type')} | "
+            f"STATUS: {claim.get('status')} | "
+            f"EVIDENCE: {claim.get('evidence')}"
+        )
+
+    print("========== END ALL CLAIMS ==========\n")
+
+    # ============================================================
+    # FINAL CLAIM STATUS DEBUG
+    # ============================================================
+
+    debug_file = BASE_DIR.parent / "claim_debug.txt"
+
+    with open(debug_file, "w", encoding="utf-8") as f:
+
+        f.write(
+            "========== FINAL CLAIM STATUS DEBUG ==========\n\n"
+        )
+
+        for claim in claims:
+
+            f.write(
+                f"CLAIM: {claim.get('claim')}\n"
+                f"TYPE: {claim.get('type')}\n"
+                f"STATUS: {claim.get('status')}\n"
+                f"RAG STATUS: {claim.get('rag_status')}\n"
+                f"EVIDENCE: {claim.get('evidence')}\n"
+                f"RAG CONFIDENCE: {claim.get('rag_confidence')}\n"
+                f"RAG EVIDENCE: {claim.get('rag_evidence')}\n"
+                f"RAG SOURCES: {claim.get('rag_sources')}\n"
+                f"{'-' * 70}\n"
+            )
+
+        f.write(
+            "\n========== END DEBUG ==========\n"
+        )
 
     print(
-        "Detected:",
-        claim_stats.get(
-            "detected",
-            0,
-        ),
+        f"\n[DEBUG] Claim status report saved to: {debug_file}"
     )
-
-    print(
-        "Supported:",
-        claim_stats.get(
-            "supported",
-            0,
-        ),
-    )
-
-    print(
-        "Needs review:",
-        claim_stats.get(
-            "needs_review",
-            0,
-        ),
-    )
-
 
     # ========================================================
     # 14. EVIDENCE REPORT
@@ -1121,14 +1269,13 @@ async def analyze(
 
     warnings = []
 
-    if not identity.get(
+    if github and not identity.get(
         "github_match",
         False,
     ):
-
         warnings.append(
-            "GitHub identity does not match "
-            "the name detected in the resume."
+            "GitHub identity could not be matched "
+            "with the name detected in the resume."
         )
 
     if (
@@ -1264,6 +1411,12 @@ async def analyze(
         ),
 
         "claim_stats": claim_stats,
+
+        "debug_claim_stats": {
+            "supported": claim_stats.get("supported", 0),
+            "needs_review": claim_stats.get("needs_review", 0),
+            "detected": claim_stats.get("detected", 0),
+        },
 
         "claims": claims,
 
