@@ -1,37 +1,31 @@
 """
-PersonaDNA - Unified RAG Engine
-================================
+PersonaDNA - RAG Engine
+=======================
 
-Evidence-based candidate verification and recruiter intelligence engine.
+Evidence-based claim verification engine.
 
-This single module combines:
+Purpose
+-------
+Verifies candidate claims against:
 
-1. Claim verification
-2. GitHub structured evidence matching
-3. LinkedIn evidence matching
-4. Candidate intelligence
-5. Candidate knowledge construction
-6. Retrieval from candidate knowledge
-7. Recruiter question grounding
-8. Project evidence
-9. Suspicious claim detection
+1. Resume
+2. GitHub
+3. LinkedIn
 
 Design principles
 -----------------
-- Resume = candidate claim
-- GitHub = technical/project evidence
-- LinkedIn = professional corroboration
-- Unverified != unsupported
-- Keyword presence alone is NOT treated as proof
-- Structured GitHub evidence is stronger than generic text matching
-- Recruiter answers must be grounded in candidate evidence
-- Retrieval is deterministic and transparent
-- No external vector database required
-- No hallucinated candidate facts
-- Compatible with PersonaDNA's existing /analyze pipeline
+- Resume is treated as the candidate's claim.
+- GitHub provides technical/project evidence.
+- LinkedIn provides secondary professional corroboration.
+- "Unverified" is different from "unsupported".
+- Evidence is never treated as proof merely because a keyword appears.
+- Structured GitHub evidence is preferred over generic text matching.
+- Common technology aliases are supported.
+- The output remains compatible with PersonaDNA main.py.
+
+No external vector database is required.
 """
 
-import json
 import re
 from typing import Any
 
@@ -48,17 +42,11 @@ SUPPORTED_STATUSES = {
 }
 
 
-# ============================================================
-# CLAIM ALIASES
-# ============================================================
-
 CLAIM_ALIASES = {
-
     "ai": {
         "ai",
         "artificial intelligence",
     },
-
     "artificial intelligence": {
         "ai",
         "artificial intelligence",
@@ -69,7 +57,6 @@ CLAIM_ALIASES = {
         "machine learning",
         "machine-learning",
     },
-
     "machine learning": {
         "ml",
         "machine learning",
@@ -80,7 +67,6 @@ CLAIM_ALIASES = {
         "js",
         "javascript",
     },
-
     "javascript": {
         "js",
         "javascript",
@@ -90,7 +76,6 @@ CLAIM_ALIASES = {
         "ts",
         "typescript",
     },
-
     "typescript": {
         "ts",
         "typescript",
@@ -100,7 +85,6 @@ CLAIM_ALIASES = {
         "postgres",
         "postgresql",
     },
-
     "postgresql": {
         "postgres",
         "postgresql",
@@ -111,23 +95,15 @@ CLAIM_ALIASES = {
         "scikit-learn",
         "sklearn",
     },
-
     "scikit-learn": {
         "scikit learn",
         "scikit-learn",
         "sklearn",
     },
-
     "sklearn": {
         "scikit learn",
         "scikit-learn",
         "sklearn",
-    },
-
-    "react": {
-        "react",
-        "reactjs",
-        "react.js",
     },
 
     "reactjs": {
@@ -135,45 +111,10 @@ CLAIM_ALIASES = {
         "reactjs",
         "react.js",
     },
-
-    "node": {
-        "node",
-        "nodejs",
-        "node.js",
-    },
-
-    "nodejs": {
-        "node",
-        "nodejs",
-        "node.js",
-    },
-
-    "fastapi": {
-        "fastapi",
-    },
-
-    "flask": {
-        "flask",
-    },
-
-    "python": {
-        "python",
-    },
-
-    "java": {
-        "java",
-    },
-
-    "sql": {
-        "sql",
-    },
-
-    "github": {
-        "github",
-    },
-
-    "git": {
-        "git",
+    "react": {
+        "react",
+        "reactjs",
+        "react.js",
     },
 }
 
@@ -183,7 +124,9 @@ CLAIM_ALIASES = {
 # ============================================================
 
 def _safe_string(value: Any) -> str:
-    """Safely convert arbitrary values into strings."""
+    """
+    Safely convert arbitrary values to string.
+    """
 
     if value is None:
         return ""
@@ -196,24 +139,25 @@ def _safe_string(value: Any) -> str:
 
 def normalize_text(text: Any) -> str:
     """
-    Normalize text for deterministic retrieval.
-
-    Keeps useful programming characters while
-    removing unnecessary punctuation.
+    Normalize text for matching.
     """
 
     text = _safe_string(text).lower()
 
-    replacements = {
-        "machine-learning": "machine learning",
-        "scikit-learn": "scikit learn",
-        "react.js": "react",
-        "node.js": "nodejs",
-        "express.js": "express",
-    }
+    text = text.replace(
+        "machine-learning",
+        "machine learning",
+    )
 
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+    text = text.replace(
+        "scikit-learn",
+        "scikit learn",
+    )
+
+    text = text.replace(
+        "react.js",
+        "react",
+    )
 
     text = re.sub(
         r"[^a-z0-9+#.\- ]+",
@@ -231,7 +175,9 @@ def normalize_text(text: Any) -> str:
 
 
 def tokenize(text: Any) -> set[str]:
-    """Convert text into normalized tokens."""
+    """
+    Convert text into meaningful tokens.
+    """
 
     normalized = normalize_text(text)
 
@@ -246,7 +192,9 @@ def tokenize(text: Any) -> set[str]:
 
 
 def canonical_claim(claim: Any) -> str:
-    """Return canonical representation of a claim."""
+    """
+    Convert a claim into its canonical representation.
+    """
 
     normalized = normalize_text(claim)
 
@@ -264,7 +212,9 @@ def canonical_claim(claim: Any) -> str:
 
 
 def claim_aliases(claim: Any) -> set[str]:
-    """Return all known aliases for a claim."""
+    """
+    Return all known aliases for a claim.
+    """
 
     normalized = normalize_text(claim)
     canonical = canonical_claim(normalized)
@@ -285,7 +235,17 @@ def claim_matches(
     claim: Any,
     candidate_value: Any,
 ) -> bool:
-    """Exact normalized claim/alias comparison."""
+    """
+    Determine whether a candidate value represents
+    the supplied claim.
+
+    Supports aliases such as:
+
+    AI ↔ Artificial Intelligence
+    ML ↔ Machine Learning
+    JS ↔ JavaScript
+    Postgres ↔ PostgreSQL
+    """
 
     target = normalize_text(candidate_value)
 
@@ -294,25 +254,13 @@ def claim_matches(
 
     aliases = claim_aliases(claim)
 
-    return target in aliases
+    if target in aliases:
+        return True
 
-
-def _safe_json(value: Any) -> str:
-    """Safely serialize objects into JSON text."""
-
-    try:
-        return json.dumps(
-            value,
-            indent=2,
-            default=str,
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-
-        return str(value)
+    return any(
+        alias in target
+        for alias in aliases
+    )
 
 
 # ============================================================
@@ -324,11 +272,10 @@ def calculate_text_similarity(
     evidence: str,
 ) -> float:
     """
-    Deterministic lexical similarity.
+    Calculate lexical similarity.
 
-    This is NOT treated as proof.
-    It is only used to retrieve potentially
-    relevant evidence.
+    This is deliberately deterministic.
+    No LLM-generated confidence is used here.
     """
 
     claim_tokens = tokenize(claim)
@@ -341,152 +288,14 @@ def calculate_text_similarity(
         evidence_tokens
     )
 
-    score = (
-        len(overlap)
-        / len(claim_tokens)
+    score = len(overlap) / len(
+        claim_tokens
     )
 
     return round(
         min(score, 1.0),
         2,
     )
-
-
-# ============================================================
-# SENTENCE SPLITTING
-# ============================================================
-
-def split_into_chunks(
-    text: Any,
-) -> list[str]:
-    """
-    Split candidate knowledge into useful
-    retrieval chunks.
-    """
-
-    text = _safe_string(text).strip()
-
-    if not text:
-        return []
-
-    chunks = re.split(
-        r"\n+|(?<=[.!?])\s+",
-        text,
-    )
-
-    cleaned = []
-
-    for chunk in chunks:
-
-        chunk = chunk.strip()
-
-        if len(chunk) >= 10:
-            cleaned.append(chunk)
-
-    return cleaned
-
-
-# ============================================================
-# GENERIC EVIDENCE RETRIEVAL
-# ============================================================
-
-def retrieve_relevant_evidence(
-    query: str,
-    candidate_knowledge: str,
-    top_k: int = 5,
-) -> list[dict]:
-    """
-    Retrieve the most relevant candidate-knowledge chunks.
-
-    This is the retrieval component of PersonaDNA's
-    lightweight local RAG system.
-
-    It does NOT invent information.
-
-    Every returned item comes directly from
-    candidate knowledge.
-    """
-
-    query = _safe_string(query).strip()
-
-    if not query or not candidate_knowledge:
-        return []
-
-    query_tokens = tokenize(query)
-
-    if not query_tokens:
-        return []
-
-    chunks = split_into_chunks(
-        candidate_knowledge
-    )
-
-    scored_chunks = []
-
-    for chunk in chunks:
-
-        chunk_tokens = tokenize(chunk)
-
-        if not chunk_tokens:
-            continue
-
-        overlap = query_tokens.intersection(
-            chunk_tokens
-        )
-
-        if not overlap:
-            continue
-
-        lexical_score = (
-            len(overlap)
-            / max(
-                len(query_tokens),
-                1,
-            )
-        )
-
-        # Small bonus when the complete normalized
-        # query appears in the chunk.
-        normalized_query = normalize_text(
-            query
-        )
-
-        normalized_chunk = normalize_text(
-            chunk
-        )
-
-        phrase_bonus = 0.0
-
-        if (
-            normalized_query
-            and normalized_query in normalized_chunk
-        ):
-            phrase_bonus = 0.20
-
-        final_score = min(
-            1.0,
-            lexical_score + phrase_bonus,
-        )
-
-        scored_chunks.append(
-            {
-                "text": chunk,
-                "score": round(
-                    final_score,
-                    3,
-                ),
-                "matched_terms": sorted(
-                    overlap
-                ),
-            }
-        )
-
-    scored_chunks.sort(
-        key=lambda item: item["score"],
-        reverse=True,
-    )
-
-    return scored_chunks[:top_k]
 
 
 # ============================================================
@@ -499,15 +308,10 @@ def find_best_text_evidence(
     source_name: str,
 ) -> dict:
     """
-    Retrieve strongest textual evidence.
-
-    Important:
-    Generic textual matches are never automatically
-    considered proof.
+    Find the strongest sentence supporting a claim.
     """
 
     if not evidence_text:
-
         return {
             "source": source_name,
             "matched": False,
@@ -527,49 +331,43 @@ def find_best_text_evidence(
         evidence_text
     )
 
-    # --------------------------------------------------------
-    # Exact alias match
-    # --------------------------------------------------------
-
+    # Direct alias match is stronger than
+    # generic token overlap.
     for alias in aliases:
 
-        if (
-            alias
-            and re.search(
-                r"(?<!\w)"
-                + re.escape(alias)
-                + r"(?!\w)",
-                normalized_evidence,
-            )
-        ):
+        if alias and alias in normalized_evidence:
 
-            sentences = split_into_chunks(
-                evidence_text
+            sentences = re.split(
+                r"[.!?\n]+",
+                evidence_text,
             )
+
+            best_sentence = ""
 
             for sentence in sentences:
 
-                normalized_sentence = normalize_text(
-                    sentence
-                )
+                sentence_clean = sentence.strip()
 
-                if re.search(
-                    r"(?<!\w)"
-                    + re.escape(alias)
-                    + r"(?!\w)",
-                    normalized_sentence,
+                if not sentence_clean:
+                    continue
+
+                if alias in normalize_text(
+                    sentence_clean
                 ):
+                    best_sentence = (
+                        sentence_clean
+                    )
+                    break
 
-                    return {
-                        "source": source_name,
-                        "matched": True,
-                        "confidence": 85,
-                        "evidence": sentence[:500],
-                    }
-
-    # --------------------------------------------------------
-    # Lexical retrieval
-    # --------------------------------------------------------
+            return {
+                "source": source_name,
+                "matched": True,
+                "confidence": 85,
+                "evidence": (
+                    best_sentence
+                    or evidence_text[:500]
+                )[:500],
+            }
 
     similarity = calculate_text_similarity(
         claim_text,
@@ -577,7 +375,6 @@ def find_best_text_evidence(
     )
 
     if similarity < 0.35:
-
         return {
             "source": source_name,
             "matched": False,
@@ -591,8 +388,9 @@ def find_best_text_evidence(
         claim_text
     )
 
-    sentences = split_into_chunks(
-        evidence_text
+    sentences = re.split(
+        r"[.!?\n]+",
+        evidence_text,
     )
 
     best_sentence = ""
@@ -600,9 +398,17 @@ def find_best_text_evidence(
 
     for sentence in sentences:
 
+        sentence = sentence.strip()
+
+        if not sentence:
+            continue
+
         sentence_tokens = tokenize(
             sentence
         )
+
+        if not sentence_tokens:
+            continue
 
         overlap = claim_tokens.intersection(
             sentence_tokens
@@ -617,13 +423,12 @@ def find_best_text_evidence(
         )
 
         if sentence_score > best_score:
-
             best_score = sentence_score
             best_sentence = sentence
 
     return {
         "source": source_name,
-        "matched": bool(best_sentence),
+        "matched": True,
         "confidence": min(
             80,
             round(similarity * 100),
@@ -639,7 +444,9 @@ def find_best_text_evidence(
 def extract_github_text(
     github_evidence: dict,
 ) -> str:
-    """Convert structured GitHub data into searchable text."""
+    """
+    Convert GitHub evidence into searchable text.
+    """
 
     if not isinstance(
         github_evidence,
@@ -662,7 +469,9 @@ def extract_github_text(
 
     for key in profile_keys:
 
-        value = github_evidence.get(key)
+        value = github_evidence.get(
+            key
+        )
 
         if value:
             parts.append(
@@ -698,30 +507,29 @@ def extract_github_text(
                 "html_url",
             ]:
 
-                value = repository.get(key)
+                value = repository.get(
+                    key
+                )
 
                 if isinstance(
                     value,
                     dict,
                 ):
-
                     parts.extend(
-                        _safe_string(k)
-                        for k in value.keys()
+                        _safe_string(key)
+                        for key in value.keys()
                     )
 
                 elif isinstance(
                     value,
                     list,
                 ):
-
                     parts.extend(
                         _safe_string(item)
                         for item in value
                     )
 
                 elif value:
-
                     parts.append(
                         _safe_string(value)
                     )
@@ -736,30 +544,29 @@ def extract_github_text(
             [],
         )
 
-        if not isinstance(
+        if isinstance(
             evidence,
             list,
         ):
-            continue
 
-        for item in evidence:
+            for item in evidence:
 
-            if isinstance(
-                item,
-                dict,
-            ):
+                if isinstance(
+                    item,
+                    dict,
+                ):
 
-                parts.extend(
-                    _safe_string(value)
-                    for value in item.values()
-                    if value
-                )
+                    parts.extend(
+                        _safe_string(value)
+                        for value in item.values()
+                        if value
+                    )
 
-            elif item:
+                elif item:
 
-                parts.append(
-                    _safe_string(item)
-                )
+                    parts.append(
+                        _safe_string(item)
+                    )
 
     return "\n".join(parts)
 
@@ -771,7 +578,9 @@ def extract_github_text(
 def extract_linkedin_text(
     linkedin_evidence: dict,
 ) -> str:
-    """Convert LinkedIn evidence into searchable text."""
+    """
+    Convert LinkedIn evidence into searchable text.
+    """
 
     if not isinstance(
         linkedin_evidence,
@@ -795,7 +604,9 @@ def extract_linkedin_text(
         "linkedin_url",
     ]:
 
-        value = linkedin_evidence.get(key)
+        value = linkedin_evidence.get(
+            key
+        )
 
         if value:
             parts.append(
@@ -813,30 +624,29 @@ def extract_linkedin_text(
             [],
         )
 
-        if not isinstance(
+        if isinstance(
             values,
             list,
         ):
-            continue
 
-        for item in values:
+            for item in values:
 
-            if isinstance(
-                item,
-                dict,
-            ):
+                if isinstance(
+                    item,
+                    dict,
+                ):
 
-                parts.extend(
-                    _safe_string(value)
-                    for value in item.values()
-                    if value
-                )
+                    parts.extend(
+                        _safe_string(value)
+                        for value in item.values()
+                        if value
+                    )
 
-            elif item:
+                elif item:
 
-                parts.append(
-                    _safe_string(item)
-                )
+                    parts.append(
+                        _safe_string(item)
+                    )
 
     return "\n".join(parts)
 
@@ -850,13 +660,13 @@ def find_github_structured_evidence(
     github_evidence: dict,
 ) -> dict:
     """
-    Search structured GitHub evidence.
+    Search GitHub's structured evidence.
 
     Priority:
 
-    1. Technologies
-    2. Primary language
-    3. Languages
+    1. Repository technologies
+    2. Repository language
+    3. Repository languages
     4. Topics
     5. technology_evidence
     6. skill_evidence
@@ -866,7 +676,6 @@ def find_github_structured_evidence(
         github_evidence,
         dict,
     ):
-
         return {
             "matched": False,
             "confidence": 0,
@@ -903,10 +712,7 @@ def find_github_structured_evidence(
 
             evidence_types = set()
 
-            # ------------------------------------------------
             # Technologies
-            # ------------------------------------------------
-
             technologies = repository.get(
                 "technologies",
                 [],
@@ -923,15 +729,11 @@ def find_github_structured_evidence(
                         claim,
                         technology,
                     ):
-
                         evidence_types.add(
                             "technology"
                         )
 
-            # ------------------------------------------------
             # Primary language
-            # ------------------------------------------------
-
             language = repository.get(
                 "language",
                 "",
@@ -941,15 +743,11 @@ def find_github_structured_evidence(
                 claim,
                 language,
             ):
-
                 evidence_types.add(
                     "language"
                 )
 
-            # ------------------------------------------------
             # Language statistics
-            # ------------------------------------------------
-
             languages = repository.get(
                 "languages",
                 {},
@@ -966,15 +764,11 @@ def find_github_structured_evidence(
                         claim,
                         language_name,
                     ):
-
                         evidence_types.add(
                             "languages"
                         )
 
-            # ------------------------------------------------
             # Topics
-            # ------------------------------------------------
-
             topics = repository.get(
                 "topics",
                 [],
@@ -991,7 +785,6 @@ def find_github_structured_evidence(
                         claim,
                         topic,
                     ):
-
                         evidence_types.add(
                             "topic"
                         )
@@ -1054,7 +847,7 @@ def find_github_structured_evidence(
                     )
 
     # ========================================================
-    # Build result
+    # Return strong GitHub match
     # ========================================================
 
     if (
@@ -1069,8 +862,8 @@ def find_github_structured_evidence(
             evidence_lines.append(
                 (
                     f"GitHub repository "
-                    f"'{repository['name']}' contains "
-                    f"structured evidence for "
+                    f"'{repository['name']}' "
+                    f"contains evidence for "
                     f"'{claim}' through "
                     f"{', '.join(repository['evidence_types'])}."
                 )
@@ -1083,19 +876,13 @@ def find_github_structured_evidence(
             evidence_lines.append(
                 (
                     f"GitHub {evidence_type.replace('_', ' ')} "
-                    f"contains structured evidence for "
-                    f"'{claim}'."
+                    f"contains evidence for '{claim}'."
                 )
             )
 
         repository_count = len(
             matched_repositories
         )
-
-        # ----------------------------------------------------
-        # Confidence is evidence strength,
-        # NOT probability that candidate is truthful.
-        # ----------------------------------------------------
 
         if repository_count >= 2:
             confidence = 98
@@ -1114,7 +901,7 @@ def find_github_structured_evidence(
             "confidence": confidence,
             "evidence": " ".join(
                 evidence_lines
-            )[:1500],
+            )[:1000],
             "repositories": [
                 item["name"]
                 for item in matched_repositories
@@ -1130,7 +917,7 @@ def find_github_structured_evidence(
 
 
 # ============================================================
-# CLAIM VERIFICATION
+# MAIN VERIFICATION
 # ============================================================
 
 def verify_claim_with_rag(
@@ -1142,31 +929,23 @@ def verify_claim_with_rag(
     """
     Verify one candidate claim.
 
-    Status semantics
-    ----------------
+    Status semantics:
 
     supported
-        Strong structured external evidence exists.
+        Strong external corroboration.
 
     partially_supported
-        Credible external evidence exists but
-        does not meet the strongest corroboration
-        threshold.
+        One credible external source.
 
     needs_review
-        Claim appears in resume but external
-        corroboration is missing.
+        Claim appears in resume but lacks external
+        corroboration.
 
     unsupported
-        Claim cannot be found in available evidence.
-
-    Important:
-    LinkedIn + generic keyword matching is NOT
-    automatically treated as strong proof.
+        Claim was not found in available evidence.
     """
 
     if not claim:
-
         return {
             "status": "needs_review",
             "confidence": 0,
@@ -1174,30 +953,18 @@ def verify_claim_with_rag(
             "sources": [],
         }
 
-    github_evidence = (
-        github_evidence
-        if isinstance(
-            github_evidence,
-            dict,
-        )
-        else {}
-    )
+    if github_evidence is None:
+        github_evidence = {}
 
-    linkedin_evidence = (
-        linkedin_evidence
-        if isinstance(
-            linkedin_evidence,
-            dict,
-        )
-        else {}
-    )
+    if linkedin_evidence is None:
+        linkedin_evidence = {}
 
     claim_text = _safe_string(
         claim
     ).strip()
 
     # ========================================================
-    # RESUME
+    # Resume
     # ========================================================
 
     resume_result = find_best_text_evidence(
@@ -1207,7 +974,7 @@ def verify_claim_with_rag(
     )
 
     # ========================================================
-    # GITHUB STRUCTURED
+    # GitHub
     # ========================================================
 
     github_structured = (
@@ -1217,21 +984,16 @@ def verify_claim_with_rag(
         )
     )
 
+  
+
     if github_structured["matched"]:
 
         github_result = {
             "source": "github",
             "matched": True,
-            "confidence": github_structured[
-                "confidence"
-            ],
-            "evidence": github_structured[
-                "evidence"
-            ],
-            "repositories": github_structured[
-                "repositories"
-            ],
-            "structured": True,
+            "confidence": github_structured["confidence"],
+            "evidence": github_structured["evidence"],
+            "repositories": github_structured["repositories"],
         }
 
     else:
@@ -1242,11 +1004,10 @@ def verify_claim_with_rag(
             "confidence": 0,
             "evidence": "",
             "repositories": [],
-            "structured": False,
         }
 
     # ========================================================
-    # LINKEDIN
+    # LinkedIn
     # ========================================================
 
     linkedin_text = extract_linkedin_text(
@@ -1260,123 +1021,118 @@ def verify_claim_with_rag(
     )
 
     # ========================================================
-    # EXTERNAL EVIDENCE
+    # External evidence
     # ========================================================
 
-    github_match = github_result["matched"]
-    linkedin_match = linkedin_result["matched"]
-
-    github_confidence = github_result[
-        "confidence"
+    external_results = [
+        github_result,
+        linkedin_result,
     ]
 
-    linkedin_confidence = linkedin_result[
-        "confidence"
+    external_matches = [
+        result
+        for result in external_results
+        if result.get("matched")
     ]
 
-    evidence = []
-
-    if github_match and github_result.get(
-        "evidence"
-    ):
-
-        evidence.append(
-            {
-                "source": "github",
-                "text": github_result[
-                    "evidence"
-                ],
-                "confidence": github_confidence,
-                "structured": True,
-                "repositories": github_result.get(
-                    "repositories",
-                    [],
-                ),
-            }
-        )
-
-    if linkedin_match and linkedin_result.get(
-        "evidence"
-    ):
-
-        evidence.append(
-            {
-                "source": "linkedin",
-                "text": linkedin_result[
-                    "evidence"
-                ],
-                "confidence": linkedin_confidence,
-                "structured": False,
-            }
-        )
-
     # ========================================================
-    # STATUS DECISION
+    # Strong support
     # ========================================================
 
-    # --------------------------------------------------------
-    # CASE 1:
-    # Strong structured GitHub evidence
-    # --------------------------------------------------------
+    if len(external_matches) >= 2:
 
-    if (
-        github_match
-        and github_confidence >= 90
-    ):
+        confidence = max(
+            result["confidence"]
+            for result in external_matches
+        )
 
-        if linkedin_match:
+        evidence = []
 
-            return {
-                "status": "supported",
-                "confidence": min(
-                    100,
-                    max(
-                        95,
-                        github_confidence,
-                    ),
-                ),
-                "evidence": evidence,
-                "sources": [
-                    "github",
-                    "linkedin",
-                ],
-            }
+        for result in external_matches:
+
+            if result.get("evidence"):
+
+                evidence.append(
+                    {
+                        "source": result["source"],
+                        "text": result["evidence"],
+                        "confidence": result[
+                            "confidence"
+                        ],
+                    }
+                )
 
         return {
             "status": "supported",
-            "confidence": github_confidence,
-            "evidence": evidence,
-            "sources": [
-                "github"
-            ],
-        }
-
-    # --------------------------------------------------------
-    # CASE 2:
-    # LinkedIn corroboration only
-    # --------------------------------------------------------
-
-    if linkedin_match:
-
-        return {
-            "status": "partially_supported",
-            "confidence": max(
-                75,
-                min(
-                    85,
-                    linkedin_confidence,
+            "confidence": min(
+                100,
+                max(
+                    confidence,
+                    90,
                 ),
             ),
             "evidence": evidence,
             "sources": [
-                "linkedin"
+                result["source"]
+                for result in external_matches
             ],
         }
 
-    # --------------------------------------------------------
-    # CASE 3:
+    # ========================================================
+    # One external source
+    # ========================================================
+
+    if len(external_matches) == 1:
+
+        result = external_matches[0]
+
+        confidence = result[
+            "confidence"
+        ]
+
+        evidence = []
+
+        if result.get("evidence"):
+
+            evidence.append(
+                {
+                    "source": result["source"],
+                    "text": result["evidence"],
+                    "confidence": confidence,
+                }
+            )
+
+        # Strong structured GitHub evidence
+        # is stronger than generic textual evidence.
+        if (
+            result["source"] == "github"
+            and confidence >= 90
+        ):
+
+            status = "supported"
+
+        else:
+
+            status = "partially_supported"
+
+        return {
+            "status": status,
+            "confidence": min(
+                100,
+                max(
+                    75,
+                    confidence,
+                ),
+            ),
+            "evidence": evidence,
+            "sources": [
+                result["source"]
+            ],
+        }
+
+    # ========================================================
     # Resume only
-    # --------------------------------------------------------
+    # ========================================================
 
     if resume_result["matched"]:
 
@@ -1385,10 +1141,8 @@ def verify_claim_with_rag(
             "confidence": max(
                 20,
                 min(
+                    resume_result["confidence"],
                     60,
-                    resume_result[
-                        "confidence"
-                    ],
                 ),
             ),
             "evidence": [
@@ -1407,10 +1161,9 @@ def verify_claim_with_rag(
             ],
         }
 
-    # --------------------------------------------------------
-    # CASE 4:
-    # Nothing found
-    # --------------------------------------------------------
+    # ========================================================
+    # Unsupported
+    # ========================================================
 
     return {
         "status": "unsupported",
@@ -1421,7 +1174,7 @@ def verify_claim_with_rag(
 
 
 # ============================================================
-# BATCH CLAIM VERIFICATION
+# BATCH VERIFICATION
 # ============================================================
 
 def verify_claims_with_rag(
@@ -1430,7 +1183,9 @@ def verify_claims_with_rag(
     github_evidence: dict | None = None,
     linkedin_evidence: dict | None = None,
 ) -> list:
-    """Verify multiple claims."""
+    """
+    Verify multiple claims.
+    """
 
     verified_claims = []
 
@@ -1510,1120 +1265,111 @@ def verify_claims_with_rag(
 
     return verified_claims
 
-
 # ============================================================
-# EVIDENCE STRENGTH
-# ============================================================
-
-def calculate_evidence_strength(
-    claim: dict,
-    github_evidence: dict | None = None,
-    linkedin_evidence: dict | None = None,
-) -> dict:
-    """
-    Calculate evidence strength.
-
-    Unlike the old implementation, this function
-    can use the actual RAG result attached to a claim.
-
-    Resume alone is never considered strong evidence.
-    """
-
-    github_evidence = github_evidence or {}
-    linkedin_evidence = linkedin_evidence or {}
-
-    rag_status = claim.get(
-        "rag_status",
-        "unverified",
-    )
-
-    rag_confidence = claim.get(
-        "rag_confidence",
-        0,
-    )
-
-    sources = claim.get(
-        "rag_sources",
-        [],
-    )
-
-    if not isinstance(
-        sources,
-        list,
-    ):
-        sources = []
-
-    # --------------------------------------------------------
-    # Use RAG result when available
-    # --------------------------------------------------------
-
-    if rag_status == "supported":
-
-        return {
-            "score": min(
-                100,
-                max(
-                    80,
-                    int(
-                        rag_confidence
-                        or 80
-                    ),
-                ),
-            ),
-            "strength": "strong",
-            "sources": sources,
-        }
-
-    if rag_status == "partially_supported":
-
-        return {
-            "score": min(
-                79,
-                max(
-                    50,
-                    int(
-                        rag_confidence
-                        or 50
-                    ),
-                ),
-            ),
-            "strength": "moderate",
-            "sources": sources,
-        }
-
-    if rag_status == "needs_review":
-
-        return {
-            "score": min(
-                49,
-                max(
-                    20,
-                    int(
-                        rag_confidence
-                        or 20
-                    ),
-                ),
-            ),
-            "strength": "weak",
-            "sources": sources,
-        }
-
-    return {
-        "score": 0,
-        "strength": "none",
-        "sources": [],
-    }
-
-
-# ============================================================
-# PROJECT EVIDENCE
+# CANDIDATE EVIDENCE RETRIEVAL
 # ============================================================
 
-def extract_project_evidence(
-    claims,
-) -> list[dict]:
-    """Extract project claims."""
-
-    projects = []
-
-    for claim in claims or []:
-
-        if not isinstance(
-            claim,
-            dict,
-        ):
-            continue
-
-        if claim.get(
-            "type"
-        ) != "project":
-
-            continue
-
-        projects.append(
-            {
-                "project": claim.get(
-                    "claim",
-                    "",
-                ),
-                "resume_evidence": claim.get(
-                    "project_text",
-                    claim.get(
-                        "claim",
-                        "",
-                    ),
-                ),
-                "technologies": claim.get(
-                    "technologies",
-                    [],
-                ),
-                "rag_status": claim.get(
-                    "rag_status",
-                    "unverified",
-                ),
-                "rag_confidence": claim.get(
-                    "rag_confidence",
-                    0,
-                ),
-                "rag_sources": claim.get(
-                    "rag_sources",
-                    [],
-                ),
-            }
-        )
-
-    return projects
-
-
-# ============================================================
-# SUSPICIOUS CLAIM DETECTION
-# ============================================================
-
-def detect_suspicious_claims(
-    claims,
-    identity,
-    github_evidence,
-):
-    """
-    Detect claims requiring recruiter attention.
-
-    This does NOT call a candidate dishonest.
-    It only identifies insufficient or conflicting evidence.
-    """
-
-    suspicious = []
-
-    claims = claims or []
-    identity = identity or {}
-    github_evidence = github_evidence or {}
-
-    github_profile_found = bool(
-        github_evidence.get(
-            "profile_found",
-            False,
-        )
-    )
-
-    github_match = bool(
-        identity.get(
-            "github_match",
-            False,
-        )
-    )
-
-    for claim in claims:
-
-        if not isinstance(
-            claim,
-            dict,
-        ):
-            continue
-
-        if claim.get(
-            "type"
-        ) != "skill":
-
-            continue
-
-        rag_status = claim.get(
-            "rag_status",
-            "unverified",
-        )
-
-        rag_sources = claim.get(
-            "rag_sources",
-            [],
-        )
-
-        if not isinstance(
-            rag_sources,
-            list,
-        ):
-            rag_sources = []
-
-        reasons = []
-
-        if rag_status == "unsupported":
-
-            reasons.append(
-                "The claimed skill was not found in the available evidence."
-            )
-
-        elif rag_status == "needs_review":
-
-            reasons.append(
-                "The skill appears in the resume but lacks external corroboration."
-            )
-
-        elif rag_status == "partially_supported":
-
-            reasons.append(
-                "External evidence exists, but stronger corroboration is recommended."
-            )
-
-        if (
-            github_profile_found
-            and not github_match
-        ):
-
-            reasons.append(
-                "GitHub identity does not match the resume identity."
-            )
-
-        if reasons:
-
-            risk = "medium"
-
-            if (
-                not rag_sources
-                and github_profile_found
-                and not github_match
-            ):
-
-                risk = "high"
-
-            suspicious.append(
-                {
-                    "claim": claim.get(
-                        "claim",
-                        "",
-                    ),
-                    "type": "skill",
-                    "reasons": reasons,
-                    "risk": risk,
-                    "rag_status": rag_status,
-                    "rag_sources": rag_sources,
-                }
-            )
-
-    return suspicious
-
-
-# ============================================================
-# CANDIDATE INTELLIGENCE
-# ============================================================
-
-def build_candidate_intelligence(
-    claims,
-    github_evidence,
-    identity,
-    resume_text,
-    linkedin_evidence=None,
-):
-    """
-    Build candidate intelligence from the complete
-    evidence set.
-    """
-
-    claims = claims or []
-    github_evidence = github_evidence or {}
-    identity = identity or {}
-    resume_text = resume_text or ""
-    linkedin_evidence = (
-        linkedin_evidence or {}
-    )
-
-    # --------------------------------------------------------
-    # Ensure claims have RAG results
-    # --------------------------------------------------------
-
-    enriched_claims = []
-
-    for claim in claims:
-
-        if not isinstance(
-            claim,
-            dict,
-        ):
-            continue
-
-        current_claim = dict(
-            claim
-        )
-
-        if not current_claim.get(
-            "rag_status"
-        ):
-
-            result = verify_claim_with_rag(
-                claim=current_claim.get(
-                    "claim",
-                    "",
-                ),
-                resume_text=resume_text,
-                github_evidence=github_evidence,
-                linkedin_evidence=linkedin_evidence,
-            )
-
-            current_claim[
-                "rag_status"
-            ] = result["status"]
-
-            current_claim[
-                "rag_confidence"
-            ] = result["confidence"]
-
-            current_claim[
-                "rag_evidence"
-            ] = result["evidence"]
-
-            current_claim[
-                "rag_sources"
-            ] = result["sources"]
-
-        enriched_claims.append(
-            current_claim
-        )
-
-    # --------------------------------------------------------
-    # Claim evidence
-    # --------------------------------------------------------
-
-    claim_evidence = []
-
-    for claim in enriched_claims:
-
-        if claim.get(
-            "type"
-        ) != "skill":
-
-            continue
-
-        evidence_result = (
-            calculate_evidence_strength(
-                claim=claim,
-                github_evidence=github_evidence,
-                linkedin_evidence=linkedin_evidence,
-            )
-        )
-
-        claim_evidence.append(
-            {
-                "claim": claim.get(
-                    "claim",
-                    "",
-                ),
-                "type": claim.get(
-                    "type",
-                    "",
-                ),
-                "score": evidence_result[
-                    "score"
-                ],
-                "strength": evidence_result[
-                    "strength"
-                ],
-                "sources": evidence_result[
-                    "sources"
-                ],
-                "rag_status": claim.get(
-                    "rag_status",
-                    "unverified",
-                ),
-                "rag_confidence": claim.get(
-                    "rag_confidence",
-                    0,
-                ),
-            }
-        )
-
-    # --------------------------------------------------------
-    # Overall evidence score
-    # --------------------------------------------------------
-
-    total_claims = len(
-        claim_evidence
-    )
-
-    if total_claims:
-
-        overall_evidence_score = round(
-            sum(
-                item["score"]
-                for item in claim_evidence
-            )
-            / total_claims
-        )
-
-    else:
-
-        overall_evidence_score = 0
-
-    if overall_evidence_score >= 80:
-
-        evidence_level = "strong"
-
-    elif overall_evidence_score >= 50:
-
-        evidence_level = "moderate"
-
-    elif overall_evidence_score > 0:
-
-        evidence_level = "weak"
-
-    else:
-
-        evidence_level = "none"
-
-    suspicious_claims = (
-        detect_suspicious_claims(
-            claims=enriched_claims,
-            identity=identity,
-            github_evidence=github_evidence,
-        )
-    )
-
-    # --------------------------------------------------------
-    # Supported / review statistics
-    # --------------------------------------------------------
-
-    supported_count = sum(
-        1
-        for claim in enriched_claims
-        if claim.get(
-            "rag_status"
-        )
-        == "supported"
-    )
-
-    partial_count = sum(
-        1
-        for claim in enriched_claims
-        if claim.get(
-            "rag_status"
-        )
-        == "partially_supported"
-    )
-
-    review_count = sum(
-        1
-        for claim in enriched_claims
-        if claim.get(
-            "rag_status"
-        )
-        == "needs_review"
-    )
-
-    unsupported_count = sum(
-        1
-        for claim in enriched_claims
-        if claim.get(
-            "rag_status"
-        )
-        == "unsupported"
-    )
-
-    return {
-        "overall_evidence_score": overall_evidence_score,
-        "evidence_level": evidence_level,
-
-        "claim_evidence": claim_evidence,
-
-        "project_evidence": (
-            extract_project_evidence(
-                enriched_claims
-            )
-        ),
-
-        "suspicious_claims": suspicious_claims,
-
-        "suspicious_claim_count": len(
-            suspicious_claims
-        ),
-
-        "supported_claim_count": supported_count,
-        "partially_supported_claim_count": partial_count,
-        "needs_review_claim_count": review_count,
-        "unsupported_claim_count": unsupported_count,
-
-        "github_profile_found": bool(
-            github_evidence.get(
-                "profile_found",
-                False,
-            )
-        ),
-
-        "github_identity_match": bool(
-            identity.get(
-                "github_match",
-                False,
-            )
-        ),
-
-        "linkedin_identity_match": bool(
-            identity.get(
-                "linkedin_match",
-                False,
-            )
-        ),
-    }
-
-
-# ============================================================
-# CANDIDATE KNOWLEDGE
-# ============================================================
-
-def build_candidate_knowledge(
-    resume_text: str,
-    claims: list,
-    github_evidence: dict,
-    linkedin_evidence: dict,
-    candidate_intelligence: dict,
-    skill_repository_mapping: dict,
-    project_repository_mapping: dict,
-    identity: dict,
-) -> str:
-    """
-    Build the candidate's complete knowledge base.
-
-    This is the source document used by the retrieval
-    layer when recruiters ask questions.
-    """
-
-    sections = []
-
-    # --------------------------------------------------------
-    # Resume
-    # --------------------------------------------------------
-
-    sections.append(
-        "===== RESUME TEXT ====="
-    )
-
-    sections.append(
-        (resume_text or "").strip()
-    )
-
-    # --------------------------------------------------------
-    # Identity
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== IDENTITY ====="
-    )
-
-    sections.append(
-        _safe_json(identity)
-    )
-
-    # --------------------------------------------------------
-    # Claims
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== EXTRACTED CLAIMS ====="
-    )
-
-    if claims:
-
-        for index, claim in enumerate(
-            claims,
-            start=1,
-        ):
-
-            if not isinstance(
-                claim,
-                dict,
-            ):
-                continue
-
-            claim_text = claim.get(
-                "claim",
-                "",
-            )
-
-            status = claim.get(
-                "rag_status",
-                "unverified",
-            )
-
-            confidence = claim.get(
-                "rag_confidence",
-                0,
-            )
-
-            sources = claim.get(
-                "rag_sources",
-                [],
-            )
-
-            sections.append(
-                (
-                    f"{index}. "
-                    f'"{claim_text}" '
-                    f"— RAG status: {status}; "
-                    f"confidence: {confidence}; "
-                    f"sources: {sources}"
-                )
-            )
-
-    else:
-
-        sections.append(
-            "No claims were extracted from the resume."
-        )
-
-    # --------------------------------------------------------
-    # GitHub
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== GITHUB EVIDENCE ====="
-    )
-
-    sections.append(
-        _safe_json(github_evidence)
-    )
-
-    # --------------------------------------------------------
-    # LinkedIn
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== LINKEDIN EVIDENCE ====="
-    )
-
-    sections.append(
-        _safe_json(linkedin_evidence)
-    )
-
-    # --------------------------------------------------------
-    # Candidate Intelligence
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== CANDIDATE INTELLIGENCE ====="
-    )
-
-    sections.append(
-        _safe_json(candidate_intelligence)
-    )
-
-    # --------------------------------------------------------
-    # Skill Mapping
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== SKILL TO REPOSITORY MAPPING ====="
-    )
-
-    sections.append(
-        _safe_json(
-            skill_repository_mapping
-        )
-    )
-
-    # --------------------------------------------------------
-    # Project Mapping
-    # --------------------------------------------------------
-
-    sections.append(
-        "\n===== PROJECT TO REPOSITORY MAPPING ====="
-    )
-
-    sections.append(
-        _safe_json(
-            project_repository_mapping
-        )
-    )
-
-    return "\n".join(
-        sections
-    )
-
-
-# ============================================================
-# RECRUITER QUERY NORMALIZATION
-# ============================================================
-
-def expand_recruiter_query(
-    question: str,
-) -> str:
-    """
-    Add useful retrieval terms to common recruiter
-    questions without inventing candidate facts.
-    """
-
-    question = _safe_string(
-        question
-    ).strip()
-
-    normalized = normalize_text(
-        question
-    )
-
-    expansions = []
-
-    question_groups = {
-
-        "skills": [
-            "skill",
-            "skills",
-            "technology",
-            "technologies",
-            "tech stack",
-            "technical",
-            "programming",
-        ],
-
-        "projects": [
-            "project",
-            "projects",
-            "built",
-            "developed",
-            "worked on",
-        ],
-
-        "experience": [
-            "experience",
-            "work experience",
-            "worked",
-            "internship",
-            "role",
-        ],
-
-        "github": [
-            "github",
-            "repository",
-            "repositories",
-            "repo",
-            "repos",
-            "code",
-        ],
-
-        "education": [
-            "education",
-            "degree",
-            "college",
-            "university",
-            "academic",
-        ],
-
-        "identity": [
-            "identity",
-            "name",
-            "profile",
-            "linkedin",
-        ],
-    }
-
-    for group_terms in question_groups.values():
-
-        if any(
-            term in normalized
-            for term in group_terms
-        ):
-
-            expansions.extend(
-                group_terms[:4]
-            )
-
-    return " ".join(
-        [
-            question,
-            *expansions,
-        ]
-    )
-
-
-# ============================================================
-# RECRUITER QUESTION RETRIEVAL
-# ============================================================
-
-def retrieve_for_recruiter(
-    question: str,
+def retrieve_candidate_evidence(
+    query: str,
     candidate_knowledge: str,
-    top_k: int = 7,
 ) -> dict:
     """
-    Retrieve evidence relevant to a recruiter question.
+    Retrieve relevant evidence from the candidate knowledge base.
 
-    Returns:
-
-    - original question
-    - expanded query
-    - retrieved evidence
-    - retrieval confidence
-    - grounded flag
+    Lightweight lexical retrieval used by PersonaDNA's RAG
+    sanity check and recruiter verification layer.
     """
 
-    if not question:
-
+    if not query or not str(query).strip():
         return {
-            "question": "",
-            "query": "",
-            "retrieved": [],
-            "retrieval_confidence": 0,
-            "grounded": False,
+            "query": query,
+            "evidence": [],
+            "chunks": [],
         }
 
-    expanded_query = (
-        expand_recruiter_query(
-            question
-        )
-    )
-
-    retrieved = retrieve_relevant_evidence(
-        query=expanded_query,
-        candidate_knowledge=candidate_knowledge,
-        top_k=top_k,
-    )
-
-    if not retrieved:
-
+    if not candidate_knowledge or not str(candidate_knowledge).strip():
         return {
-            "question": question,
-            "query": expanded_query,
-            "retrieved": [],
-            "retrieval_confidence": 0,
-            "grounded": False,
+            "query": query,
+            "evidence": [],
+            "chunks": [],
         }
 
-    highest_score = retrieved[0][
-        "score"
+    query_text = normalize_text(query)
+    knowledge_text = str(candidate_knowledge)
+
+    query_tokens = tokenize(query_text)
+
+    if not query_tokens:
+        return {
+            "query": query,
+            "evidence": [],
+            "chunks": [],
+        }
+
+    # --------------------------------------------------------
+    # Split candidate knowledge into searchable chunks
+    # --------------------------------------------------------
+
+    raw_chunks = re.split(
+        r"\n\s*\n|(?<=[.!?])\s+",
+        knowledge_text,
+    )
+
+    chunks = [
+        chunk.strip()
+        for chunk in raw_chunks
+        if chunk and chunk.strip()
     ]
 
-    if highest_score >= 0.70:
+    scored_chunks = []
 
-        retrieval_confidence = 90
+    for chunk in chunks:
 
-    elif highest_score >= 0.50:
+        chunk_tokens = tokenize(chunk)
 
-        retrieval_confidence = 75
+        if not chunk_tokens:
+            continue
 
-    elif highest_score >= 0.35:
-
-        retrieval_confidence = 60
-
-    else:
-
-        retrieval_confidence = 40
-
-    return {
-        "question": question,
-        "query": expanded_query,
-        "retrieved": retrieved,
-        "retrieval_confidence": retrieval_confidence,
-        "grounded": True,
-    }
-
-
-# ============================================================
-# RECRUITER PROMPT BUILDER
-# ============================================================
-
-def build_recruiter_prompt(
-    question: str,
-    candidate_knowledge: str,
-) -> str:
-    """
-    Build a grounded recruiter prompt.
-
-    The LLM is explicitly prohibited from using
-    information outside the retrieved candidate evidence.
-    """
-
-    retrieval = retrieve_for_recruiter(
-        question=question,
-        candidate_knowledge=candidate_knowledge,
-        top_k=7,
-    )
-
-    retrieved = retrieval.get(
-        "retrieved",
-        [],
-    )
-
-    if not retrieved:
-
-        evidence_text = (
-            "No relevant candidate evidence "
-            "was retrieved."
+        overlap = query_tokens.intersection(
+            chunk_tokens
         )
 
-    else:
+        if not overlap:
+            continue
 
-        evidence_blocks = []
-
-        for index, item in enumerate(
-            retrieved,
-            start=1,
-        ):
-
-            evidence_blocks.append(
-                (
-                    f"[Evidence {index}] "
-                    f"(retrieval score: "
-                    f"{item['score']})\n"
-                    f"{item['text']}"
-                )
-            )
-
-        evidence_text = "\n\n".join(
-            evidence_blocks
+        score = (
+            len(overlap)
+            / max(len(query_tokens), 1)
         )
 
-    return (
-        "You are PersonaDNA's evidence-grounded "
-        "recruiting assistant.\n\n"
-
-        "Your job is to answer the recruiter's "
-        "question using ONLY the retrieved candidate "
-        "evidence below.\n\n"
-
-        "STRICT RULES:\n"
-        "1. Do not invent candidate information.\n"
-        "2. Do not assume a skill merely because it "
-        "is common for the candidate's role.\n"
-        "3. Do not treat a keyword as proof.\n"
-        "4. Clearly distinguish verified evidence "
-        "from resume claims.\n"
-        "5. If evidence is insufficient, say "
-        "'The available evidence is insufficient.'\n"
-        "6. Never fabricate GitHub repositories, "
-        "projects, experience, education, or skills.\n"
-        "7. Prefer structured GitHub evidence over "
-        "generic textual matches.\n"
-        "8. Keep the answer concise and recruiter-friendly.\n\n"
-
-        "===== RETRIEVAL INFORMATION =====\n"
-        f"Retrieval confidence: "
-        f"{retrieval.get('retrieval_confidence', 0)}\n"
-        f"Grounded: "
-        f"{retrieval.get('grounded', False)}\n\n"
-
-        "===== RETRIEVED CANDIDATE EVIDENCE =====\n"
-        f"{evidence_text}\n\n"
-
-        "===== RECRUITER QUESTION =====\n"
-        f"{question}\n\n"
-
-        "===== REQUIRED ANSWER =====\n"
-    )
-
-
-# ============================================================
-# DIRECT RECRUITER ANSWER CONTEXT
-# ============================================================
-
-def answer_recruiter_question_context(
-    question: str,
-    candidate_knowledge: str,
-) -> dict:
-    """
-    Retrieve candidate evidence for a recruiter question.
-
-    This function does not call an LLM.
-
-    It returns grounded context that can safely be
-    passed to Gemini/OpenAI or another generation layer.
-    """
-
-    retrieval = retrieve_for_recruiter(
-        question=question,
-        candidate_knowledge=candidate_knowledge,
-        top_k=7,
-    )
-
-    if not retrieval["grounded"]:
-
-        return {
-            "status": "insufficient_evidence",
-            "answer": (
-                "The available candidate evidence "
-                "is insufficient to answer this question."
-            ),
-            "question": question,
-            "retrieval": retrieval,
-        }
-
-    evidence_lines = []
-
-    for item in retrieval["retrieved"]:
-
-        evidence_lines.append(
-            item["text"]
-        )
-
-    return {
-        "status": "grounded",
-        "answer": "\n".join(
-            evidence_lines
-        ),
-        "question": question,
-        "retrieval": retrieval,
-    }
-
-
-# ============================================================
-# COMPATIBILITY ALIASES
-# ============================================================
-
-def build_rag_knowledge(
-    resume_text: str,
-    claims: list,
-    github_evidence: dict,
-    linkedin_evidence: dict,
-    candidate_intelligence: dict,
-    skill_repository_mapping: dict,
-    project_repository_mapping: dict,
-    identity: dict,
-) -> str:
-    """
-    Backward-compatible alias.
-    """
-
-    return build_candidate_knowledge(
-        resume_text=resume_text,
-        claims=claims,
-        github_evidence=github_evidence,
-        linkedin_evidence=linkedin_evidence,
-        candidate_intelligence=candidate_intelligence,
-        skill_repository_mapping=skill_repository_mapping,
-        project_repository_mapping=project_repository_mapping,
-        identity=identity,
-    )
-
-
-# ============================================================
-# MODULE TEST
-# ============================================================
-
-if __name__ == "__main__":
-
-    print(
-        "PersonaDNA Unified RAG Engine loaded successfully."
-    )
-
-    test_claim = "Python"
-
-    test_github = {
-        "profile_found": True,
-        "repositories": [
+        scored_chunks.append(
             {
-                "name": "test-project",
-                "language": "Python",
-                "technologies": [
-                    "Python",
-                    "FastAPI",
-                ],
-                "topics": [
-                    "ai",
-                ],
+                "text": chunk[:1000],
+                "score": round(
+                    min(score, 1.0),
+                    2,
+                ),
+                "matched_terms": sorted(
+                    overlap
+                ),
             }
-        ],
-    }
-
-    result = verify_claim_with_rag(
-        claim=test_claim,
-        resume_text="Experienced in Python.",
-        github_evidence=test_github,
-        linkedin_evidence={},
-    )
-
-    print(
-        json.dumps(
-            result,
-            indent=2,
         )
+
+    # --------------------------------------------------------
+    # Highest relevance first
+    # --------------------------------------------------------
+
+    scored_chunks.sort(
+        key=lambda item: item["score"],
+        reverse=True,
     )
+
+    # Keep retrieval lightweight
+    top_chunks = scored_chunks[:5]
+
+    return {
+        "query": query,
+        "evidence": top_chunks,
+        "chunks": top_chunks,
+        "count": len(top_chunks),
+    }
