@@ -1,33 +1,50 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+
+from backend.services.verifier import verify_candidate
 
 router = APIRouter()
 
+
 @router.post("/analyze")
-def analyze():
+async def analyze(
+    resume: UploadFile = File(...),
+    github_url: str = Form(""),
+    linkedin_url: str = Form(""),
+    linkedin_result: str = Form(""),
+):
 
-    return {
-        "trust_score": 94,
-        "ai_confidence": 98,
-        "verified_claims": 18,
-        "risk_level": "Low",
-        "recruiter_verdict": "Recommended for Technical Interview",
+    try:
 
-        "skills": [
-            "React",
-            "Python",
-            "FastAPI",
-            "Machine Learning",
-            "Prompt Engineering"
-        ],
+        result = await verify_candidate(
+            resume=resume,
+            github_url=github_url,
+            linkedin_url=linkedin_url,
+            linkedin_result=linkedin_result,
+        )
 
-        "strengths": [
-            "Resume matches LinkedIn timeline",
-            "GitHub repositories show consistent commits",
-            "Projects support listed skills"
-        ],
+        print("API RESULT:", result)
+        print("API RESULT TYPE:", type(result))
 
-        "warnings": [
-            "One certificate could not be verified",
-            "Portfolio has no live deployment"
-        ]
-    }
+        if result is None:
+            raise HTTPException(
+                status_code=500,
+                detail="verify_candidate returned None"
+            )
+
+        print("DEBUG RESULT:", result)
+        print("DEBUG RESULT TYPE:", type(result))
+
+        return result.model_dump()
+
+    except HTTPException:
+
+        raise
+
+    except Exception as exc:
+
+        print("Analyze route error:", repr(exc))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Candidate verification failed.",
+        ) from exc

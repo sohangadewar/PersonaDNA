@@ -18,21 +18,13 @@ engine.setProperty("volume", 1.0)
 
 
 def speak(text: str):
-    """Print response and speak it with correct pronunciation."""
+    """Print and speak Jarvis response."""
 
-    # Show original branding in terminal
     print(f"\nJarvis: {text}")
 
-    # Improve pronunciation for TTS
-    speech_text = text.replace(
-        "PersonaDNA",
-        "Persona D N A"
-    )
-
     try:
-        engine.say(speech_text)
+        engine.say(text)
         engine.runAndWait()
-
     except Exception as error:
         print(f"TTS Error: {error}")
 
@@ -48,7 +40,6 @@ def listen():
     """Listen to microphone and convert speech to text."""
 
     try:
-
         with sr.Microphone() as source:
 
             print("\nListening...")
@@ -59,7 +50,6 @@ def listen():
             )
 
             try:
-
                 audio = recognizer.listen(
                     source,
                     timeout=5,
@@ -67,27 +57,19 @@ def listen():
                 )
 
             except sr.WaitTimeoutError:
-
                 print("No speech detected.")
                 return ""
 
     except OSError as error:
-
         print(f"Microphone Error: {error}")
-
-        speak(
-            "I cannot access the microphone."
-        )
-
+        speak("I cannot access the microphone.")
         return ""
 
     try:
 
         print("Processing speech...")
 
-        command = recognizer.recognize_google(
-            audio
-        )
+        command = recognizer.recognize_google(audio)
 
         print(f"You: {command}")
 
@@ -127,9 +109,9 @@ def process_jarvis_command(
 
     command = command.lower().strip()
 
-    # ========================================================
-    # INTRODUCTION
-    # ========================================================
+    # --------------------------------------------------------
+    # Introduction
+    # --------------------------------------------------------
 
     if (
         "introduce yourself" in command
@@ -146,14 +128,13 @@ def process_jarvis_command(
             "risks, and verification."
         )
 
-    # ========================================================
-    # PURPOSE
-    # ========================================================
+    # --------------------------------------------------------
+    # Purpose
+    # --------------------------------------------------------
 
     if (
         "your purpose" in command
         or "what is your purpose" in command
-        or "what is the purpose" in command
         or "what do you do" in command
         or "purpose of personadna" in command
     ):
@@ -161,15 +142,14 @@ def process_jarvis_command(
         return (
             "My purpose is to help recruiters verify "
             "candidate claims using real evidence. "
-            "I analyze resumes, GitHub, and LinkedIn "
-            "information and provide evidence-based "
-            "insights about candidate skills, trust, "
-            "risk, and verification."
+            "I can report the candidate's trust score, "
+            "AI confidence, verified claims, risk level, "
+            "recruiter verdict, skills, and projects."
         )
 
-    # ========================================================
-    # TRUST SCORE
-    # ========================================================
+    # --------------------------------------------------------
+    # Trust Score
+    # --------------------------------------------------------
 
     if (
         "trust score" in command
@@ -182,9 +162,9 @@ def process_jarvis_command(
             f"{analysis_result.get('trust_score', 0)}."
         )
 
-    # ========================================================
-    # AI CONFIDENCE
-    # ========================================================
+    # --------------------------------------------------------
+    # AI Confidence
+    # --------------------------------------------------------
 
     if (
         "ai confidence" in command
@@ -197,15 +177,14 @@ def process_jarvis_command(
             f"{analysis_result.get('ai_confidence', 0)} percent."
         )
 
-    # ========================================================
-    # VERIFIED CLAIMS
-    # ========================================================
+    # --------------------------------------------------------
+    # Verified Claims
+    # --------------------------------------------------------
 
     if (
         "verified claims" in command
         or "verified claim" in command
         or "how many claims" in command
-        or "how many verified" in command
     ):
 
         return (
@@ -214,9 +193,9 @@ def process_jarvis_command(
             f"verified claims."
         )
 
-    # ========================================================
-    # RISK
-    # ========================================================
+    # --------------------------------------------------------
+    # Risk
+    # --------------------------------------------------------
 
     if (
         "risk level" in command
@@ -230,9 +209,9 @@ def process_jarvis_command(
             f"{analysis_result.get('risk_level', 'unknown')}."
         )
 
-    # ========================================================
-    # RECRUITER VERDICT
-    # ========================================================
+    # --------------------------------------------------------
+    # Recruiter Verdict
+    # --------------------------------------------------------
 
     if (
         "recruiter verdict" in command
@@ -246,9 +225,9 @@ def process_jarvis_command(
             f"{analysis_result.get('recruiter_verdict', 'unknown')}."
         )
 
-    # ========================================================
-    # SKILLS
-    # ========================================================
+    # --------------------------------------------------------
+    # Skills
+    # --------------------------------------------------------
 
     if (
         "candidate skills" in command
@@ -265,7 +244,8 @@ def process_jarvis_command(
         if not skills:
 
             return (
-                "No candidate skills are currently available."
+                "No candidate skills are currently "
+                "available in the analysis."
             )
 
         return (
@@ -274,16 +254,14 @@ def process_jarvis_command(
             + "."
         )
 
-    # ========================================================
-    # PROJECTS
-    # ========================================================
+    # --------------------------------------------------------
+    # Projects
+    # --------------------------------------------------------
 
     if (
         "projects" in command
         or "candidate projects" in command
         or "what projects" in command
-        or "what project" in command
-        or "what project does" in command
     ):
 
         projects = analysis_result.get(
@@ -304,9 +282,9 @@ def process_jarvis_command(
             + "."
         )
 
-    # ========================================================
-    # HELP
-    # ========================================================
+    # --------------------------------------------------------
+    # Help
+    # --------------------------------------------------------
 
     if (
         "help" in command
@@ -322,9 +300,9 @@ def process_jarvis_command(
             "or candidate projects."
         )
 
-    # ========================================================
-    # EXIT
-    # ========================================================
+    # --------------------------------------------------------
+    # Exit
+    # --------------------------------------------------------
 
     if (
         command == "exit"
@@ -336,9 +314,9 @@ def process_jarvis_command(
 
         return "__EXIT__"
 
-    # ========================================================
-    # UNKNOWN COMMAND
-    # ========================================================
+    # --------------------------------------------------------
+    # Unknown Command
+    # --------------------------------------------------------
 
     return (
         "I could not find that information in the "
@@ -350,14 +328,14 @@ def process_jarvis_command(
 
 
 # ============================================================
-# START JARVIS
+# Start Jarvis
 # ============================================================
 
 def start_jarvis(analysis_result=None):
 
-    # ========================================================
-    # TEMPORARY TEST DATA
-    # ========================================================
+    # --------------------------------------------------------
+    # Temporary test data
+    # --------------------------------------------------------
 
     if analysis_result is None:
 
@@ -406,9 +384,9 @@ def start_jarvis(analysis_result=None):
             ],
         }
 
-    # ========================================================
-    # STARTUP MESSAGE
-    # ========================================================
+    # --------------------------------------------------------
+    # Startup
+    # --------------------------------------------------------
 
     print("\n" + "=" * 60)
     print("PERSONADNA JARVIS")
@@ -422,9 +400,9 @@ def start_jarvis(analysis_result=None):
         "I am ready to answer questions about the candidate."
     )
 
-    # ========================================================
-    # MAIN LOOP
-    # ========================================================
+    # --------------------------------------------------------
+    # Main Voice Loop
+    # --------------------------------------------------------
 
     while True:
 
@@ -450,7 +428,7 @@ def start_jarvis(analysis_result=None):
 
 
 # ============================================================
-# RUN DIRECTLY
+# Run Directly
 # ============================================================
 
 if __name__ == "__main__":

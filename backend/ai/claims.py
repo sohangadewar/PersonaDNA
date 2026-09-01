@@ -1,9 +1,9 @@
-import re
-
+﻿import re
 
 # ============================================================
 # Helpers
 # ============================================================
+
 
 def normalize_space(text: str) -> str:
     return re.sub(
@@ -17,17 +17,17 @@ def contains_term(
     text: str,
     term: str,
 ) -> bool:
-    pattern = (
-        r"(?<![A-Za-z0-9+#])"
-        + re.escape(term)
-        + r"(?![A-Za-z0-9+#])"
-    )
 
-    return re.search(
-        pattern,
-        text,
-        re.IGNORECASE,
-    ) is not None
+    pattern = r"(?<![A-Za-z0-9+#])" + re.escape(term) + r"(?![A-Za-z0-9+#])"
+
+    return (
+        re.search(
+            pattern,
+            text or "",
+            re.IGNORECASE,
+        )
+        is not None
+    )
 
 
 # ============================================================
@@ -142,9 +142,7 @@ def extract_project_technologies(
         ):
 
             if technology not in found:
-                found.append(
-                    technology
-                )
+                found.append(technology)
 
     return found
 
@@ -153,37 +151,32 @@ def extract_project_technologies(
 # Project name cleaning
 # ============================================================
 
+
 def clean_project_name(
     project_name: str,
 ) -> str:
 
-    value = normalize_space(
-        project_name
-    )
+    value = normalize_space(project_name)
 
-    # Remove numbering
     value = re.sub(
         r"^\s*\d+\s*[\.\):\-]\s*",
         "",
         value,
     )
 
-    # Remove bullets
     value = re.sub(
         r"^[\-\*\u2022\u2023\u25CF]+\s*",
         "",
         value,
     )
 
-    # Remove project labels
     value = re.sub(
-        r"^(project|projects|personal projects)\s*[:\-]?\s*",
+        r"^(project|projects|personal projects)" r"\s*[:\-]?\s*",
         "",
         value,
         flags=re.IGNORECASE,
     )
 
-    # Stop at obvious metadata
     stop_patterns = [
         r"\bwebsite\b",
         r"\bgithub link\b",
@@ -206,12 +199,10 @@ def clean_project_name(
         )
 
         if match:
-            value = value[:match.start()]
+            value = value[: match.start()]
             break
 
-    value = value.strip(
-        " :-|.,;"
-    )
+    value = value.strip(" :-|.,;")
 
     if not value:
         return ""
@@ -239,29 +230,23 @@ def clean_project_name(
 # Project extraction
 # ============================================================
 
+
 def extract_project_claims(
     resume_text: str,
 ) -> list[dict]:
 
-    # PDF extraction can destroy the original layout,
-    # so inspect both original lines and a normalized form.
     original_text = resume_text or ""
 
-    normalized_text = normalize_space(
-        original_text
-    )
+    normalized_text = normalize_space(original_text)
 
     projects = []
-
-    # --------------------------------------------------------
-    # 1. Look specifically for a Personal Projects section
-    # --------------------------------------------------------
 
     section_match = re.search(
         r"(?:personal\s+projects|projects)"
         r"\s*:\s*"
         r"(.*?)(?="
-        r"\b(?:work experience|experience|education|skills|certifications|certificate)\b"
+        r"\b(?:work experience|experience|education|"
+        r"skills|certifications|certificate)\b"
         r"|$)",
         normalized_text,
         re.IGNORECASE,
@@ -269,19 +254,10 @@ def extract_project_claims(
 
     if section_match:
 
-        section_text = section_match.group(
-            1
-        ).strip()
+        section_text = section_match.group(1).strip()
 
-        # Find numbered projects:
-        # 1. Food Delivery App
-        # 2. PlacementGPT
         numbered_matches = re.findall(
-            r"(?:^|\s)"
-            r"(\d+)"
-            r"\.\s*"
-            r"(.+?)"
-            r"(?=\s+\d+\.\s+|$)",
+            r"(?:^|\s)" r"(\d+)" r"\.\s*" r"(.+?)" r"(?=\s+\d+\.\s+|$)",
             section_text,
             re.IGNORECASE,
         )
@@ -290,31 +266,20 @@ def extract_project_claims(
 
             raw_project = raw_project.strip()
 
-            project_name = clean_project_name(
-                raw_project
-            )
+            project_name = clean_project_name(raw_project)
 
             if not project_name:
                 continue
-
-            # Keep useful project text for matching
-            project_text = raw_project
 
             projects.append(
                 {
                     "claim": project_name,
                     "type": "project",
                     "status": "detected",
-                    "project_text": project_text,
-                    "technologies": extract_project_technologies(
-                        project_text
-                    ),
+                    "project_text": raw_project,
+                    "technologies": (extract_project_technologies(raw_project)),
                 }
             )
-
-    # --------------------------------------------------------
-    # 2. Look for explicit "Project: X"
-    # --------------------------------------------------------
 
     explicit_matches = re.findall(
         r"(?:project|project name)"
@@ -326,9 +291,7 @@ def extract_project_claims(
 
     for raw_project in explicit_matches:
 
-        project_name = clean_project_name(
-            raw_project
-        )
+        project_name = clean_project_name(raw_project)
 
         if not project_name:
             continue
@@ -339,39 +302,142 @@ def extract_project_claims(
                 "type": "project",
                 "status": "detected",
                 "project_text": raw_project,
-                "technologies": extract_project_technologies(
-                    raw_project
-                ),
+                "technologies": (extract_project_technologies(raw_project)),
             }
         )
-
-    # --------------------------------------------------------
-    # 3. Deduplicate
-    # --------------------------------------------------------
 
     unique = {}
 
     for project in projects:
 
-        key = normalize_space(
-            project["claim"]
-        ).lower()
+        key = normalize_space(project["claim"]).lower()
 
         if key not in unique:
             unique[key] = project
 
-    return list(
-        unique.values()
+    return list(unique.values())
+
+
+# ============================================================
+# Certification extraction
+# ============================================================
+
+
+def extract_certification_claims(
+    resume_text: str,
+) -> list[dict]:
+
+    text = resume_text or ""
+
+    certifications = []
+
+    section_match = re.search(
+        r"(?:certifications?|certificates?|credentials?)"
+        r"\s*[:\-]?\s*"
+        r"(.*?)"
+        r"(?="
+        r"\b(?:projects?|personal projects|education|"
+        r"experience|work experience|skills|technical skills)\b"
+        r"|$)",
+        normalize_space(text),
+        re.IGNORECASE,
     )
+
+    if not section_match:
+        return certifications
+
+    section_text = section_match.group(1).strip()
+
+    entries = re.split(
+        r"\s*(?:\||•|▪|◦|●|\n)\s*" r"|\s+(?=\d+[\.\):\-]\s+)",
+        section_text,
+    )
+
+    for entry in entries:
+
+        entry = normalize_space(entry)
+
+        if not entry:
+            continue
+
+        entry = re.sub(
+            r"^\s*\d+\s*[\.\):\-]\s*",
+            "",
+            entry,
+        )
+
+        entry = re.sub(
+            r"^[\-\*•▪◦●]+\s*",
+            "",
+            entry,
+        )
+
+        entry = re.sub(
+            r"\b(?:credential\s*)?(?:id|ID)" r"\s*[:#\-]?\s*\S+",
+            "",
+            entry,
+            flags=re.IGNORECASE,
+        )
+
+        entry = re.sub(
+            r"\b(?:credential\s*)?(?:url|link)" r"\s*[:\-]?\s*\S+",
+            "",
+            entry,
+            flags=re.IGNORECASE,
+        )
+
+        entry = normalize_space(entry)
+
+        if not entry:
+            continue
+
+        if entry.lower() in {
+            "certificate",
+            "certificates",
+            "certification",
+            "certifications",
+            "credentials",
+        }:
+            continue
+
+        if len(entry) > 180:
+            continue
+
+        certifications.append(
+            {
+                "claim": entry,
+                "type": "certification",
+                "status": "detected",
+                "evidence": {
+                    "resume": True,
+                    "github": False,
+                    "linkedin": False,
+                },
+            }
+        )
+
+    unique = {}
+
+    for certification in certifications:
+
+        key = normalize_space(certification["claim"]).lower()
+
+        if key not in unique:
+            unique[key] = certification
+
+    return list(unique.values())
 
 
 # ============================================================
 # Main claim extraction
 # ============================================================
 
+
 def extract_claims(
     resume_text: str,
 ) -> list[dict]:
+
+    text = resume_text or ""
 
     claims = []
 
@@ -382,7 +448,7 @@ def extract_claims(
     for skill in SKILL_PATTERNS:
 
         if contains_term(
-            resume_text,
+            text,
             skill,
         ):
 
@@ -391,6 +457,11 @@ def extract_claims(
                     "claim": skill,
                     "type": "skill",
                     "status": "detected",
+                    "evidence": {
+                        "resume": True,
+                        "github": False,
+                        "linkedin": False,
+                    },
                 }
             )
 
@@ -402,7 +473,7 @@ def extract_claims(
 
         match = re.search(
             pattern,
-            resume_text,
+            text,
             re.IGNORECASE,
         )
 
@@ -410,9 +481,14 @@ def extract_claims(
 
             claims.append(
                 {
-                    "claim": match.group(0),
+                    "claim": normalize_space(match.group(0)),
                     "type": "education",
                     "status": "detected",
+                    "evidence": {
+                        "resume": True,
+                        "github": False,
+                        "linkedin": False,
+                    },
                 }
             )
 
@@ -420,32 +496,72 @@ def extract_claims(
     # Certifications
     # --------------------------------------------------------
 
-    for pattern in CERTIFICATION_PATTERNS:
-
-        match = re.search(
-            pattern,
-            resume_text,
-            re.IGNORECASE,
-        )
-
-        if match:
-
-            claims.append(
-                {
-                    "claim": match.group(0).title(),
-                    "type": "certification",
-                    "status": "detected",
-                }
-            )
+    claims.extend(extract_certification_claims(text))
 
     # --------------------------------------------------------
     # Projects
     # --------------------------------------------------------
 
-    claims.extend(
-        extract_project_claims(
-            resume_text
-        )
-    )
+    claims.extend(extract_project_claims(text))
 
-    return claims
+    # --------------------------------------------------------
+    # Deduplicate
+    # --------------------------------------------------------
+
+    unique = {}
+
+    for claim in claims:
+
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            continue
+
+        claim_name = normalize_space(
+            str(
+                claim.get(
+                    "claim",
+                    "",
+                )
+            )
+        )
+
+        if not claim_name:
+            continue
+
+        claim_type = normalize_space(
+            str(
+                claim.get(
+                    "type",
+                    "",
+                )
+            )
+        ).lower()
+
+        key = (
+            claim_type,
+            claim_name.lower(),
+        )
+
+        if key not in unique:
+
+            claim["claim"] = claim_name
+
+            claim.setdefault(
+                "status",
+                "detected",
+            )
+
+            claim.setdefault(
+                "evidence",
+                {
+                    "resume": True,
+                    "github": False,
+                    "linkedin": False,
+                },
+            )
+
+            unique[key] = claim
+
+    return list(unique.values())

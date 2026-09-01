@@ -19,6 +19,11 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ report }: DashboardProps) {
+  console.log("========== DASHBOARD REPORT DEBUG ==========");
+  console.log("verified_claims:", report.verified_claims);
+  console.log("claim_stats:", report.claim_stats);
+  console.log("supported:", report.claim_stats?.supported);
+  console.log("============================================");
   return (
     <div className="min-h-screen bg-[#09090B] px-8 py-10 text-white">
 

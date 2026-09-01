@@ -1,96 +1,368 @@
+import re
+
 from typing import Any
 
 
 # ============================================================
-# Normalization
+# CONFIGURATION
 # ============================================================
 
-def normalize_text(value: Any) -> str:
-    return str(value or "").strip().lower()
+SKILL_ALIASES = {
+    "ai": {
+        "ai",
+        "artificial intelligence",
+    },
+
+    "artificial intelligence": {
+        "ai",
+        "artificial intelligence",
+    },
+
+    "ml": {
+        "ml",
+        "machine learning",
+        "machine-learning",
+    },
+
+    "machine learning": {
+        "ml",
+        "machine learning",
+        "machine-learning",
+    },
+
+    "js": {
+        "js",
+        "javascript",
+    },
+
+    "javascript": {
+        "js",
+        "javascript",
+    },
+
+    "ts": {
+        "ts",
+        "typescript",
+    },
+
+    "typescript": {
+        "ts",
+        "typescript",
+    },
+
+    "postgres": {
+        "postgres",
+        "postgresql",
+    },
+
+    "postgresql": {
+        "postgres",
+        "postgresql",
+    },
+
+    "scikit learn": {
+        "scikit learn",
+        "scikit-learn",
+        "sklearn",
+    },
+
+    "scikit-learn": {
+        "scikit learn",
+        "scikit-learn",
+        "sklearn",
+    },
+
+    "sklearn": {
+        "scikit learn",
+        "scikit-learn",
+        "sklearn",
+    },
+
+    "react": {
+        "react",
+        "reactjs",
+        "react.js",
+    },
+
+    "reactjs": {
+        "react",
+        "reactjs",
+        "react.js",
+    },
+
+    "react.js": {
+        "react",
+        "reactjs",
+        "react.js",
+    },
+
+    "fastapi": {
+        "fastapi",
+    },
+
+    "flask": {
+        "flask",
+    },
+
+    "sql": {
+        "sql",
+    },
+
+    "python": {
+        "python",
+    },
+
+    "java": {
+        "java",
+    },
+
+    "c": {
+        "c",
+    },
+
+    "html": {
+        "html",
+        "html5",
+    },
+
+    "css": {
+        "css",
+        "css3",
+    },
+
+    "git": {
+        "git",
+    },
+
+    "github": {
+        "github",
+    },
+
+    "google cloud": {
+        "google cloud",
+        "gcp",
+        "google-cloud",
+    },
+
+    "rag": {
+        "rag",
+        "retrieval augmented generation",
+        "retrieval-augmented generation",
+    },
+
+    "langchain": {
+        "langchain",
+    },
+
+    "data science": {
+        "data science",
+    },
+
+    "rest api": {
+        "rest api",
+        "rest",
+        "restful api",
+    },
+
+    "rest": {
+        "rest",
+        "rest api",
+        "restful api",
+    },
+}
 
 
-def canonical_skill(skill: str) -> str:
+# ============================================================
+# BASIC HELPERS
+# ============================================================
+
+def _safe_string(value: Any) -> str:
     """
-    Convert common aliases to one canonical skill name.
+    Safely convert any value to string.
     """
 
-    value = normalize_text(skill)
+    if value is None:
+        return ""
 
-    aliases = {
-        "python": "python",
+    if isinstance(value, str):
+        return value
 
-        "java": "java",
+    try:
+        return str(value)
 
-        "javascript": "javascript",
-        "js": "javascript",
+    except Exception:
+        return ""
 
-        "typescript": "typescript",
-        "ts": "typescript",
 
-        "react": "react",
-        "reactjs": "react",
-        "react.js": "react",
+# ============================================================
+# NORMALIZATION
+# ============================================================
 
-        "node": "node.js",
-        "nodejs": "node.js",
-        "node.js": "node.js",
+def normalize_text(text: Any) -> str:
+    """
+    Normalize text for deterministic matching.
+    """
 
-        "express": "express.js",
-        "expressjs": "express.js",
-        "express.js": "express.js",
+    text = _safe_string(text).lower().strip()
 
-        "fastapi": "fastapi",
-        "flask": "flask",
-        "django": "django",
-
-        "sql": "sql",
-        "mysql": "sql",
-        "postgres": "sql",
-        "postgresql": "sql",
-        "sqlite": "sql",
-
-        "mongodb": "mongodb",
-        "mongo": "mongodb",
-        "mongoose": "mongodb",
-
-        "machine learning": "machine learning",
-        "ml": "machine learning",
-        "scikit-learn": "machine learning",
-        "sklearn": "machine learning",
-
-        "deep learning": "deep learning",
-        "tensorflow": "deep learning",
-        "pytorch": "deep learning",
-
-        "artificial intelligence": "ai",
-        "ai": "ai",
-
-        "data science": "data science",
-        "pandas": "data science",
-        "numpy": "data science",
-
-        "data analysis": "data analysis",
-
-        "git": "git",
-        "github": "github",
-
-        "docker": "docker",
-
-        "aws": "aws",
-        "amazon web services": "aws",
-
-        "google cloud": "google cloud",
-        "gcp": "google cloud",
-    }
-
-    return aliases.get(
-        value,
-        value,
+    # Standard aliases
+    text = text.replace(
+        "machine-learning",
+        "machine learning",
     )
 
+    text = text.replace(
+        "scikit-learn",
+        "scikit learn",
+    )
+
+    text = text.replace(
+        "react.js",
+        "react",
+    )
+
+    text = text.replace(
+        "google-cloud",
+        "google cloud",
+    )
+
+    text = text.replace(
+        "retrieval-augmented-generation",
+        "retrieval augmented generation",
+    )
+
+    # Keep letters, numbers, +, #, ., -, and spaces
+    text = re.sub(
+        r"[^a-z0-9+#.\- ]+",
+        " ",
+        text,
+    )
+
+    # Remove repeated spaces
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    )
+
+    return text.strip()
+
 
 # ============================================================
-# Exact repository evidence
+# CANONICAL SKILL
+# ============================================================
+
+def canonical_skill(skill: Any) -> str:
+    """
+    Convert a skill into one canonical representation.
+    """
+
+    normalized = normalize_text(skill)
+
+    if not normalized:
+        return ""
+
+    for canonical, aliases in SKILL_ALIASES.items():
+
+        normalized_aliases = {
+            normalize_text(alias)
+            for alias in aliases
+        }
+
+        if normalized in normalized_aliases:
+            return canonical
+
+    return normalized
+
+
+# ============================================================
+# SKILL ALIASES
+# ============================================================
+
+def skill_aliases(skill: Any) -> set[str]:
+    """
+    Return all known aliases for a skill.
+    """
+
+    normalized = normalize_text(skill)
+
+    if not normalized:
+        return set()
+
+    canonical = canonical_skill(normalized)
+
+    aliases = SKILL_ALIASES.get(
+        canonical,
+        {normalized},
+    )
+
+    result = {
+        normalize_text(alias)
+        for alias in aliases
+        if normalize_text(alias)
+    }
+
+    result.add(normalized)
+
+    return result
+
+
+# ============================================================
+# EXACT SKILL MATCHING
+# ============================================================
+
+def skill_matches(
+    claimed_skill: Any,
+    observed_skill: Any,
+) -> bool:
+    """
+    Strict skill matching.
+
+    Important:
+
+        Java != JavaScript
+        SQL != SQLAlchemy
+        C != CSS
+
+    Known aliases are supported.
+    """
+
+    observed = normalize_text(observed_skill)
+
+    if not observed:
+        return False
+
+    aliases = skill_aliases(claimed_skill)
+
+    for alias in aliases:
+
+        alias = normalize_text(alias)
+
+        if not alias:
+            continue
+
+        # Exact match
+        if observed == alias:
+            return True
+
+        # Boundary-aware match
+        pattern = (
+            rf"(?<![a-z0-9])"
+            rf"{re.escape(alias)}"
+            rf"(?![a-z0-9])"
+        )
+
+        if re.search(
+            pattern,
+            observed,
+        ):
+            return True
+
+    return False
+
+
+# ============================================================
+# EXACT REPOSITORY EVIDENCE
 # ============================================================
 
 def repository_has_skill(
@@ -98,21 +370,26 @@ def repository_has_skill(
     repository: dict,
 ) -> tuple[bool, list[str]]:
     """
-    Determine whether a repository contains genuine evidence
+    Determine whether a repository contains evidence
     for a specific skill.
 
     Evidence sources:
+
         - technologies
         - primary language
         - additional languages
     """
 
-    target = canonical_skill(skill)
+    if not isinstance(
+        repository,
+        dict,
+    ):
+        return False, []
 
     evidence_sources = []
 
     # --------------------------------------------------------
-    # Technology evidence
+    # TECHNOLOGY EVIDENCE
     # --------------------------------------------------------
 
     technologies = repository.get(
@@ -120,15 +397,16 @@ def repository_has_skill(
         [],
     )
 
-    if isinstance(technologies, list):
+    if isinstance(
+        technologies,
+        list,
+    ):
 
         for technology in technologies:
 
-            if (
-                canonical_skill(
-                    str(technology)
-                )
-                == target
+            if skill_matches(
+                skill,
+                technology,
             ):
 
                 evidence_sources.append(
@@ -138,7 +416,7 @@ def repository_has_skill(
                 break
 
     # --------------------------------------------------------
-    # Primary language
+    # PRIMARY LANGUAGE
     # --------------------------------------------------------
 
     language = repository.get(
@@ -148,11 +426,9 @@ def repository_has_skill(
 
     if language:
 
-        if (
-            canonical_skill(
-                str(language)
-            )
-            == target
+        if skill_matches(
+            skill,
+            language,
         ):
 
             evidence_sources.append(
@@ -160,7 +436,7 @@ def repository_has_skill(
             )
 
     # --------------------------------------------------------
-    # Language statistics
+    # LANGUAGE STATISTICS
     # --------------------------------------------------------
 
     languages = repository.get(
@@ -175,11 +451,9 @@ def repository_has_skill(
 
         for language_name in languages.keys():
 
-            if (
-                canonical_skill(
-                    str(language_name)
-                )
-                == target
+            if skill_matches(
+                skill,
+                language_name,
             ):
 
                 evidence_sources.append(
@@ -199,7 +473,7 @@ def repository_has_skill(
 
 
 # ============================================================
-# Skill → Repository mapping
+# SKILL → REPOSITORY MAPPING
 # ============================================================
 
 def map_skill_to_repositories(
@@ -211,9 +485,21 @@ def map_skill_to_repositories(
     the requested skill.
     """
 
+    if not isinstance(
+        repositories,
+        list,
+    ):
+        return []
+
     matches = []
 
     for repository in repositories:
+
+        if not isinstance(
+            repository,
+            dict,
+        ):
+            continue
 
         matched, evidence_sources = (
             repository_has_skill(
@@ -227,32 +513,74 @@ def map_skill_to_repositories(
 
         matches.append(
             {
-                "repository": repository.get(
-                    "name",
-                    "",
+                "repository": _safe_string(
+                    repository.get(
+                        "name",
+                        "",
+                    )
                 ),
-                "matched_evidence": evidence_sources,
-                "language": repository.get(
-                    "language",
-                    "",
+
+                "matched_evidence": (
+                    evidence_sources
                 ),
-                "technologies": repository.get(
-                    "technologies",
-                    [],
+
+                "language": _safe_string(
+                    repository.get(
+                        "language",
+                        "",
+                    )
                 ),
-                "languages": repository.get(
-                    "languages",
-                    {},
+
+                "technologies": (
+                    repository.get(
+                        "technologies",
+                        [],
+                    )
+                    if isinstance(
+                        repository.get(
+                            "technologies",
+                            [],
+                        ),
+                        list,
+                    )
+                    else []
                 ),
+
+                "languages": (
+                    repository.get(
+                        "languages",
+                        {},
+                    )
+                    if isinstance(
+                        repository.get(
+                            "languages",
+                            {},
+                        ),
+                        dict,
+                    )
+                    else {}
+                ),
+
                 "has_readme": bool(
                     repository.get(
                         "has_readme",
                         False,
                     )
                 ),
-                "dependency_files": repository.get(
-                    "dependency_files",
-                    {},
+
+                "dependency_files": (
+                    repository.get(
+                        "dependency_files",
+                        {},
+                    )
+                    if isinstance(
+                        repository.get(
+                            "dependency_files",
+                            {},
+                        ),
+                        dict,
+                    )
+                    else {}
                 ),
             }
         )
@@ -260,10 +588,33 @@ def map_skill_to_repositories(
     return matches
 
 
+# ============================================================
+# BUILD REPOSITORY SKILL MAPPING
+# ============================================================
+
 def build_repository_skill_mapping(
     claims: list[dict],
     github_evidence: dict,
 ) -> dict:
+    """
+    Build:
+
+        skill → repositories
+
+    mapping.
+    """
+
+    if not isinstance(
+        claims,
+        list,
+    ):
+        return {}
+
+    if not isinstance(
+        github_evidence,
+        dict,
+    ):
+        return {}
 
     repositories = github_evidence.get(
         "repositories",
@@ -274,17 +625,26 @@ def build_repository_skill_mapping(
 
     for claim in claims:
 
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            continue
+
         if claim.get(
             "type"
         ) != "skill":
             continue
 
-        skill = str(
+        skill = _safe_string(
             claim.get(
                 "claim",
                 "",
             )
-        )
+        ).strip()
+
+        if not skill:
+            continue
 
         mapping[skill] = (
             map_skill_to_repositories(
@@ -309,35 +669,44 @@ def calculate_evidence_strength(
     Single authoritative evidence scoring model.
 
     Score:
-        Resume evidence           = 20
-        GitHub repository match   = 30
-        Exact technology          = 20
-        GitHub language           = 15
-        Multiple repositories     = 10
-        README evidence           = 5
+
+        Resume evidence          = 20
+        GitHub repository match  = 30
+        Exact technology         = 20
+        GitHub language          = 15
+        Multiple repositories    = 10
+        README evidence          = 5
 
     Maximum = 100.
 
-    Important:
-    The existence of a matched repository always creates
-    external GitHub evidence.
+    This score measures evidence strength.
+    It does NOT automatically prove the candidate's claim.
     """
 
     score = 0
     reasons = []
 
     # --------------------------------------------------------
-    # Resume
+    # RESUME
     # --------------------------------------------------------
 
-    if claim.get(
+    claim_evidence = claim.get(
         "evidence",
         {},
-    ).get(
+    )
+
+    if not isinstance(
+        claim_evidence,
+        dict,
+    ):
+        claim_evidence = {}
+
+    resume_evidence = claim_evidence.get(
         "resume",
         True,
-    ):
+    )
 
+    if resume_evidence:
         score += 20
 
         reasons.append(
@@ -345,7 +714,18 @@ def calculate_evidence_strength(
         )
 
     # --------------------------------------------------------
-    # No GitHub repository match
+    # GITHUB PROFILE
+    # --------------------------------------------------------
+
+    github_profile_found = bool(
+        github_evidence.get(
+            "profile_found",
+            True,
+        )
+    )
+
+    # --------------------------------------------------------
+    # NO REPOSITORY MATCH
     # --------------------------------------------------------
 
     if not repository_matches:
@@ -361,17 +741,19 @@ def calculate_evidence_strength(
         }
 
     # --------------------------------------------------------
-    # GitHub repository evidence
+    # GITHUB REPOSITORY EVIDENCE
     # --------------------------------------------------------
 
-    score += 30
+    if github_profile_found:
 
-    reasons.append(
-        "Matching GitHub repository evidence was found."
-    )
+        score += 30
+
+        reasons.append(
+            "Matching GitHub repository evidence was found."
+        )
 
     # --------------------------------------------------------
-    # Exact technology
+    # EXACT TECHNOLOGY
     # --------------------------------------------------------
 
     technology_matches = sum(
@@ -393,7 +775,7 @@ def calculate_evidence_strength(
         )
 
     # --------------------------------------------------------
-    # Language
+    # LANGUAGE
     # --------------------------------------------------------
 
     language_matches = sum(
@@ -423,7 +805,7 @@ def calculate_evidence_strength(
         )
 
     # --------------------------------------------------------
-    # Multiple repositories
+    # MULTIPLE REPOSITORIES
     # --------------------------------------------------------
 
     if len(repository_matches) >= 2:
@@ -453,7 +835,7 @@ def calculate_evidence_strength(
         )
 
     # --------------------------------------------------------
-    # Clamp
+    # CLAMP
     # --------------------------------------------------------
 
     score = min(
@@ -462,7 +844,7 @@ def calculate_evidence_strength(
     )
 
     # --------------------------------------------------------
-    # Level
+    # LEVEL
     # --------------------------------------------------------
 
     if score >= 80:
@@ -493,11 +875,30 @@ def build_evidence_report(
     github_evidence: dict,
 ) -> list[dict]:
     """
-    The single source of truth for claim evidence.
+    Single source of truth for GitHub skill evidence.
 
-    Every skill claim is evaluated through the same
-    repository-matching and scoring functions.
+    Every skill claim uses the same:
+
+        claim
+            ↓
+        repository matching
+            ↓
+        evidence scoring
+            ↓
+        evidence report
     """
+
+    if not isinstance(
+        claims,
+        list,
+    ):
+        return []
+
+    if not isinstance(
+        github_evidence,
+        dict,
+    ):
+        github_evidence = {}
 
     repositories = github_evidence.get(
         "repositories",
@@ -508,17 +909,26 @@ def build_evidence_report(
 
     for claim in claims:
 
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            continue
+
         if claim.get(
             "type"
         ) != "skill":
             continue
 
-        claim_name = str(
+        claim_name = _safe_string(
             claim.get(
                 "claim",
                 "",
             )
         ).strip()
+
+        if not claim_name:
+            continue
 
         repository_matches = (
             map_skill_to_repositories(
@@ -527,22 +937,36 @@ def build_evidence_report(
             )
         )
 
-        strength = calculate_evidence_strength(
-            claim,
-            repository_matches,
-            github_evidence,
+        strength = (
+            calculate_evidence_strength(
+                claim=claim,
+                repository_matches=repository_matches,
+                github_evidence=github_evidence,
+            )
         )
 
         report.append(
             {
                 "claim": claim_name,
+
                 "type": "skill",
-                "score": strength["score"],
-                "level": strength["level"],
-                "reasons": strength["reasons"],
-                "github_repository_count": len(
-                    repository_matches
+
+                "score": strength[
+                    "score"
+                ],
+
+                "level": strength[
+                    "level"
+                ],
+
+                "reasons": strength[
+                    "reasons"
+                ],
+
+                "github_repository_count": (
+                    len(repository_matches)
                 ),
+
                 "github_repositories": [
                     item.get(
                         "repository",
@@ -557,13 +981,34 @@ def build_evidence_report(
 
 
 # ============================================================
-# Claim enrichment
+# CLAIM ENRICHMENT
 # ============================================================
 
 def enrich_claims_with_github(
     claims: list[dict],
     github_evidence: dict,
 ) -> list[dict]:
+    """
+    Add GitHub evidence to claims.
+
+    Important:
+    This function only records evidence.
+
+    It does NOT make the final verification decision.
+    RAG performs final claim verification.
+    """
+
+    if not isinstance(
+        claims,
+        list,
+    ):
+        return []
+
+    if not isinstance(
+        github_evidence,
+        dict,
+    ):
+        github_evidence = {}
 
     repositories = github_evidence.get(
         "repositories",
@@ -579,30 +1024,75 @@ def enrich_claims_with_github(
 
     for claim in claims:
 
-        claim.setdefault(
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            continue
+
+        # ----------------------------------------------------
+        # Preserve existing evidence
+        # ----------------------------------------------------
+
+        evidence = claim.get(
             "evidence",
-            {
-                "resume": True,
-                "github": False,
-                "linkedin": False,
-            },
+            {},
         )
+
+        if not isinstance(
+            evidence,
+            dict,
+        ):
+            evidence = {}
+
+        evidence.setdefault(
+            "resume",
+            True,
+        )
+
+        evidence.setdefault(
+            "github",
+            False,
+        )
+
+        evidence.setdefault(
+            "linkedin",
+            False,
+        )
+
+        claim["evidence"] = evidence
+
+        # ----------------------------------------------------
+        # Non-skill claims
+        # ----------------------------------------------------
 
         if claim.get(
             "type"
         ) != "skill":
 
-            claim["status"] = "detected"
+            claim.setdefault(
+                "status",
+                "detected",
+            )
+
             continue
 
-        matches = map_skill_to_repositories(
-            str(
-                claim.get(
-                    "claim",
-                    "",
-                )
-            ),
-            repositories,
+        # ----------------------------------------------------
+        # Repository matching
+        # ----------------------------------------------------
+
+        skill = _safe_string(
+            claim.get(
+                "claim",
+                "",
+            )
+        ).strip()
+
+        matches = (
+            map_skill_to_repositories(
+                skill,
+                repositories,
+            )
         )
 
         github_match = bool(
@@ -610,26 +1100,58 @@ def enrich_claims_with_github(
             and matches
         )
 
-        claim["evidence"][
+        # ----------------------------------------------------
+        # Record GitHub evidence
+        # ----------------------------------------------------
+
+        evidence[
             "github"
         ] = github_match
 
-        claim["status"] = (
-            "supported"
-            if github_match
-            else "needs_review"
-        )
+        claim[
+            "evidence"
+        ] = evidence
+
+        # ----------------------------------------------------
+        # Do not decide final verification here
+        # ----------------------------------------------------
+
+        claim[
+            "status"
+        ] = "detected"
 
     return claims
 
 
 # ============================================================
-# Claim statistics
+# CLAIM STATISTICS
 # ============================================================
 
 def calculate_claim_stats(
     claims: list[dict],
 ) -> dict:
+    """
+    Calculate final claim statistics.
+
+    Supports:
+
+        supported
+        partially_supported
+        needs_review
+        unsupported
+    """
+
+    if not isinstance(
+        claims,
+        list,
+    ):
+        return {
+            "detected": 0,
+            "supported": 0,
+            "partially_supported": 0,
+            "needs_review": 0,
+            "unsupported": 0,
+        }
 
     supported_statuses = {
         "supported",
@@ -637,35 +1159,69 @@ def calculate_claim_stats(
         "confirmed",
     }
 
+    partial_statuses = {
+        "partially_supported",
+        "partial",
+    }
+
     needs_review_statuses = {
         "needs_review",
         "review",
     }
 
+    unsupported_statuses = {
+        "unsupported",
+    }
+
+    supported = 0
+    partially_supported = 0
+    needs_review = 0
+    unsupported = 0
+
+    for claim in claims:
+
+        if not isinstance(
+            claim,
+            dict,
+        ):
+            continue
+
+        status = str(
+            claim.get(
+                "status",
+                claim.get(
+                    "rag_status",
+                    "",
+                ),
+            )
+        ).lower().strip()
+
+        if status in supported_statuses:
+
+            supported += 1
+
+        elif status in partial_statuses:
+
+            partially_supported += 1
+
+        elif status in needs_review_statuses:
+
+            needs_review += 1
+
+        elif status in unsupported_statuses:
+
+            unsupported += 1
+
     return {
         "detected": len(claims),
 
-        "supported": sum(
-            1
-            for claim in claims
-            if str(
-                claim.get(
-                    "status",
-                    "",
-                )
-            ).lower()
-            in supported_statuses
+        "supported": supported,
+
+        "partially_supported": (
+            partially_supported
         ),
 
-        "needs_review": sum(
-            1
-            for claim in claims
-            if str(
-                claim.get(
-                    "status",
-                    "",
-                )
-            ).lower()
-            in needs_review_statuses
-        ),
+        "needs_review": needs_review,
+
+        "unsupported": unsupported,
     }

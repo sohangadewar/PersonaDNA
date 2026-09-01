@@ -1,11 +1,39 @@
-﻿venv/
-.venv/
+﻿# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables / secrets
 .env
 .env.*
 !.env.example
+
+# IDE
 .vscode/
-node_modules/
-dist/
-build/
+
+# Backup files
+*.backup
+*.backup2
+*.before_cleanup
+*.bak
+
+# Logs / debug
+*.log
+claim_debug.txt
+
+# Test / personal files
+test_resume.txt
+
+# Development reference files
+backend_structure.txt
+backend/backend_structure.txt
+render-openapi.txt
+
+# OS
+.DS_Store
+Thumbs.db

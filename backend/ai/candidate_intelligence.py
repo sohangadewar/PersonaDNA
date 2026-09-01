@@ -1,73 +1,85 @@
-from backend.ai.rag_engine import verify_claim_with_rag
+# ============================================================
+# PersonaDNA - Candidate Intelligence Engine
+# ============================================================
+
 import json
-
-def normalize_text(value) -> str:
-    if value is None:
-        return ""
-
-    return str(
-        value
-    ).lower().strip()
 
 
 # ============================================================
-# Evidence strength
+# Evidence Strength
 # ============================================================
 
 def calculate_evidence_strength(
     claim,
-    github_evidence,
+    github_evidence=None,
 ):
+    """
+    Calculate external/source coverage for a claim.
 
-    evidence = claim.get(
-        "evidence",
-        {},
-    )
+    IMPORTANT:
+    This measures evidence coverage, NOT whether the claim
+    is definitely true.
+
+    Standard claims:
+        Resume   = 20
+        GitHub   = 40
+        LinkedIn = 40
+
+    Education / Certification:
+        Resume   = 50
+        LinkedIn = 50
+    """
+
+    claim = claim if isinstance(claim, dict) else {}
+
+    evidence = claim.get("evidence", {})
+
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    claim_type = str(
+        claim.get("type", "skill")
+    ).strip().lower()
+
+    resume = evidence.get("resume") is True
+    github = evidence.get("github") is True
+    linkedin = evidence.get("linkedin") is True
+
+    if claim_type in {
+        "education",
+        "certification",
+    }:
+        resume_weight = 50
+        github_weight = 0
+        linkedin_weight = 50
+    else:
+        resume_weight = 20
+        github_weight = 40
+        linkedin_weight = 40
 
     score = 0
     sources = []
 
-    if evidence.get(
-        "resume",
-        False,
-    ):
-        score += 20
-        sources.append(
-            "resume"
-        )
+    if resume:
+        score += resume_weight
+        sources.append("resume")
 
-    if evidence.get(
-        "github",
-        False,
-    ):
-        score += 40
-        sources.append(
-            "github"
-        )
+    if github:
+        score += github_weight
+        sources.append("github")
 
-    if evidence.get(
-        "linkedin",
-        False,
-    ):
-        score += 40
-        sources.append(
-            "linkedin"
-        )
+    if linkedin:
+        score += linkedin_weight
+        sources.append("linkedin")
 
-    score = min(
-        score,
-        100,
-    )
+    score = max(0, min(score, 100))
 
     if score >= 80:
         strength = "strong"
-
     elif score >= 50:
         strength = "moderate"
-
     elif score > 0:
         strength = "weak"
-
     else:
         strength = "none"
 
@@ -79,7 +91,7 @@ def calculate_evidence_strength(
 
 
 # ============================================================
-# Project evidence
+# Project Evidence
 # ============================================================
 
 def extract_project_evidence(
@@ -88,11 +100,14 @@ def extract_project_evidence(
 
     projects = []
 
-    for claim in claims:
+    for claim in claims or []:
 
-        if claim.get(
-            "type"
-        ) != "project":
+        if not isinstance(claim, dict):
+            continue
+
+        if str(
+            claim.get("type", "")
+        ).strip().lower() != "project":
             continue
 
         projects.append(
@@ -112,6 +127,17 @@ def extract_project_evidence(
                     "technologies",
                     [],
                 ),
+                "status": claim.get(
+                    "status",
+                    claim.get(
+                        "rag_status",
+                        "needs_review",
+                    ),
+                ),
+                "rag_confidence": claim.get(
+                    "rag_confidence",
+                    0,
+                ),
             }
         )
 
@@ -119,7 +145,7 @@ def extract_project_evidence(
 
 
 # ============================================================
-# Suspicious claims
+# Suspicious Claims
 # ============================================================
 
 def detect_suspicious_claims(
@@ -129,6 +155,10 @@ def detect_suspicious_claims(
 ):
 
     suspicious = []
+
+    claims = claims or []
+    identity = identity or {}
+    github_evidence = github_evidence or {}
 
     github_profile_found = bool(
         github_evidence.get(
@@ -146,9 +176,41 @@ def detect_suspicious_claims(
 
     for claim in claims:
 
-        if claim.get(
-            "type"
-        ) != "skill":
+        if not isinstance(claim, dict):
+            continue
+
+        claim_type = str(
+            claim.get(
+                "type",
+                "",
+            )
+        ).strip().lower()
+
+        # ----------------------------------------------------
+        # Suspicious detection currently focuses on skills.
+        # ----------------------------------------------------
+
+        if claim_type != "skill":
+            continue
+
+        # ----------------------------------------------------
+        # IMPORTANT:
+        # RAG / final status is authoritative.
+        #
+        # A supported claim must NEVER be marked suspicious.
+        # ----------------------------------------------------
+
+        final_status = str(
+            claim.get(
+                "status",
+                claim.get(
+                    "rag_status",
+                    "needs_review",
+                ),
+            )
+        ).strip().lower()
+
+        if final_status == "supported":
             continue
 
         evidence = claim.get(
@@ -156,47 +218,60 @@ def detect_suspicious_claims(
             {},
         )
 
-        github_claim = bool(
-            evidence.get(
-                "github",
-                False,
-            )
+        if not isinstance(evidence, dict):
+            evidence = {}
+
+        github_claim = (
+            evidence.get("github") is True
         )
 
-        linkedin_claim = bool(
-            evidence.get(
-                "linkedin",
-                False,
-            )
+        linkedin_claim = (
+            evidence.get("linkedin") is True
         )
 
         reasons = []
+
+        # ----------------------------------------------------
+        # No external evidence
+        # ----------------------------------------------------
 
         if (
             not github_claim
             and not linkedin_claim
         ):
-
             reasons.append(
                 "No external evidence found for this skill."
             )
 
+        # ----------------------------------------------------
+        # GitHub identity mismatch
+        #
+        # Only report mismatch when GitHub actually provided
+        # evidence for the claim.
+        # ----------------------------------------------------
+
         if (
             github_profile_found
+            and github_claim
             and not github_match
         ):
-
             reasons.append(
-                "GitHub identity does not match the resume identity."
+                "GitHub identity does not match "
+                "the resume identity."
             )
+
+        # ----------------------------------------------------
+        # Create suspicious record only when an actual reason
+        # exists.
+        # ----------------------------------------------------
 
         if reasons:
 
             risk = "medium"
 
             if (
-                not github_claim
-                and github_profile_found
+                github_profile_found
+                and github_claim
                 and not github_match
             ):
                 risk = "high"
@@ -210,6 +285,11 @@ def detect_suspicious_claims(
                     "type": "skill",
                     "reasons": reasons,
                     "risk": risk,
+                    "rag_status": final_status,
+                    "rag_confidence": claim.get(
+                        "rag_confidence",
+                        0,
+                    ),
                 }
             )
 
@@ -217,127 +297,34 @@ def detect_suspicious_claims(
 
 
 # ============================================================
-# Candidate intelligence
+# Candidate Intelligence
 # ============================================================
 
-def build_candidate_knowledge(
-    resume_text: str,
-    claims: list,
-    github_evidence: dict,
-    linkedin_evidence: dict,
-    candidate_intelligence: dict,
-    skill_repository_mapping: dict,
-    project_repository_mapping: dict,
-    identity: dict,
-) -> str:
-    """
-    Combine everything known about a candidate into one plain-text
-    knowledge document for retrieval / grounding.
-    """
- 
-    sections = []
- 
-    # ---------------- Resume ----------------
-    sections.append("===== RESUME TEXT =====")
-    sections.append((resume_text or "").strip())
- 
-    # ---------------- Identity ----------------
-    sections.append("\n===== IDENTITY =====")
-    sections.append(_safe_json(identity))
- 
-    # ---------------- Claims ----------------
-    sections.append("\n===== EXTRACTED CLAIMS =====")
-    if claims:
-        for i, claim in enumerate(claims, start=1):
-            claim_text = claim.get("claim", "") if isinstance(claim, dict) else str(claim)
-            status = claim.get("rag_status", "unverified") if isinstance(claim, dict) else "unverified"
-            sections.append(f"{i}. \"{claim_text}\" — status: {status}")
-    else:
-        sections.append("No claims were extracted from the resume.")
- 
-    # ---------------- GitHub evidence ----------------
-    sections.append("\n===== GITHUB EVIDENCE =====")
-    sections.append(_safe_json(github_evidence))
- 
-    # ---------------- LinkedIn evidence ----------------
-    sections.append("\n===== LINKEDIN EVIDENCE =====")
-    sections.append(_safe_json(linkedin_evidence))
- 
-    # ---------------- Candidate intelligence ----------------
-    sections.append("\n===== CANDIDATE INTELLIGENCE =====")
-    sections.append(_safe_json(candidate_intelligence))
- 
-    # ---------------- Skill -> repository mapping ----------------
-    sections.append("\n===== SKILL TO REPOSITORY MAPPING =====")
-    sections.append(_safe_json(skill_repository_mapping))
- 
-    # ---------------- Project -> repository mapping ----------------
-    sections.append("\n===== PROJECT TO REPOSITORY MAPPING =====")
-    sections.append(_safe_json(project_repository_mapping))
- 
-    return "\n".join(sections)
- 
- 
-# ============================================================
-# RECRUITER PROMPT BUILDER
-# ============================================================
- 
-def build_recruiter_prompt(question: str, candidate_knowledge: str) -> str:
-    """
-    Wrap a recruiter's free-text question together with the candidate's
-    knowledge document into a single prompt for an LLM to answer, using
-    only the supplied evidence.
-    """
- 
-    return (
-        "You are PersonaDNA's recruiting assistant. Answer the recruiter's "
-        "question using ONLY the candidate information provided below. "
-        "If the evidence does not support a clear answer, say so explicitly "
-        "instead of guessing.\n\n"
-        "===== CANDIDATE KNOWLEDGE =====\n"
-        f"{candidate_knowledge}\n\n"
-        "===== RECRUITER QUESTION =====\n"
-        f"{question}\n\n"
-        "===== ANSWER =====\n"
-    )
- 
- 
-# ============================================================
-# HELPERS
-# ============================================================
- 
-def _safe_json(value) -> str:
-    """
-    Safely pretty-print a dict/list as JSON text for inclusion in the
-    knowledge document. Falls back to str() if it isn't serializable.
-    """
- 
-    try:
-        return json.dumps(value, indent=2, default=str)
-    except (TypeError, ValueError):
-        return str(value)
-    
 def build_candidate_intelligence(
     claims,
     github_evidence,
     identity,
     resume_text,
 ):
-    """
-    Build a candidate intelligence summary from
-    resume claims, GitHub evidence, and identity.
-    """
 
     claims = claims or []
     github_evidence = github_evidence or {}
     identity = identity or {}
     resume_text = resume_text or ""
 
+    # ========================================================
+    # Suspicious claims
+    # ========================================================
+
     suspicious_claims = detect_suspicious_claims(
         claims=claims,
         identity=identity,
         github_evidence=github_evidence,
     )
+
+    # ========================================================
+    # Claim evidence
+    # ========================================================
 
     claim_evidence = []
 
@@ -346,18 +333,20 @@ def build_candidate_intelligence(
         if not isinstance(claim, dict):
             continue
 
-        if claim.get("type") != "skill":
-            continue
-
-        evidence = claim.get(
-            "evidence",
-            {},
-        )
-
         evidence_result = calculate_evidence_strength(
             claim=claim,
             github_evidence=github_evidence,
         )
+
+        final_status = str(
+            claim.get(
+                "status",
+                claim.get(
+                    "rag_status",
+                    "needs_review",
+                ),
+            )
+        ).strip().lower()
 
         claim_evidence.append(
             {
@@ -372,20 +361,67 @@ def build_candidate_intelligence(
                 "score": evidence_result["score"],
                 "strength": evidence_result["strength"],
                 "sources": evidence_result["sources"],
+
+                # Final verification result
+                "status": final_status,
+
+                # RAG information
+                "rag_status": claim.get(
+                    "rag_status",
+                    final_status,
+                ),
+                "rag_confidence": claim.get(
+                    "rag_confidence",
+                    0,
+                ),
             }
         )
 
+    # ========================================================
+    # Claim statistics
+    # ========================================================
+
     total_claims = len(claim_evidence)
 
-    if total_claims > 0:
+    verified_claims = sum(
+        1
+        for item in claim_evidence
+        if item.get("status") == "supported"
+    )
+
+    needs_review_claims = sum(
+        1
+        for item in claim_evidence
+        if item.get("status") == "needs_review"
+    )
+
+    contradicted_claims = sum(
+        1
+        for item in claim_evidence
+        if item.get("status") == "contradicted"
+    )
+
+    # ========================================================
+    # Evidence score
+    # ========================================================
+
+    if total_claims:
+
         overall_evidence_score = round(
             sum(
                 item["score"]
                 for item in claim_evidence
-            ) / total_claims
+            )
+            / total_claims
         )
+
     else:
+
         overall_evidence_score = 0
+
+    # ========================================================
+    # Evidence level
+    # ========================================================
 
     if overall_evidence_score >= 80:
         evidence_level = "strong"
@@ -399,15 +435,320 @@ def build_candidate_intelligence(
     else:
         evidence_level = "none"
 
+    # ========================================================
+    # Return intelligence
+    # ========================================================
+
     return {
         "overall_evidence_score": overall_evidence_score,
         "evidence_level": evidence_level,
+
+        "total_claims": total_claims,
+        "verified_claims": verified_claims,
+        "needs_review_claims": needs_review_claims,
+        "contradicted_claims": contradicted_claims,
+
         "claim_evidence": claim_evidence,
+
         "project_evidence": extract_project_evidence(
             claims
         ),
+
         "suspicious_claims": suspicious_claims,
+
         "suspicious_claim_count": len(
             suspicious_claims
         ),
     }
+
+
+# ============================================================
+# Candidate Knowledge
+# ============================================================
+
+def build_candidate_knowledge(
+    resume_text,
+    claims,
+    github_evidence,
+    linkedin_evidence,
+    candidate_intelligence,
+    skill_repository_mapping,
+    project_repository_mapping,
+    identity,
+    trust_score=None,
+    ai_confidence=None,
+    risk_level=None,
+    recruiter_verdict=None,
+):
+
+    sections = []
+
+    # ========================================================
+    # OFFICIAL PERSONADNA SCORES
+    # ========================================================
+
+    sections.append(
+        "===== OFFICIAL PERSONADNA SCORES ====="
+    )
+
+    if trust_score is not None:
+        sections.append(
+            f"Official PersonaDNA Trust Score: {trust_score}"
+        )
+
+    if ai_confidence is not None:
+        sections.append(
+            f"Official PersonaDNA AI Confidence: {ai_confidence}"
+        )
+
+    if risk_level:
+        sections.append(
+            f"Official PersonaDNA Risk Level: {risk_level}"
+        )
+
+    if recruiter_verdict:
+        sections.append(
+            f"Official PersonaDNA Recruiter Verdict: {recruiter_verdict}"
+        )
+
+    # ========================================================
+    # CLAIM SUMMARY
+    # ========================================================
+
+    sections.append(
+        "\n===== CLAIM SUMMARY ====="
+    )
+
+    if isinstance(candidate_intelligence, dict):
+
+        sections.append(
+            f"Total Claims: "
+            f"{candidate_intelligence.get('total_claims', 0)}"
+        )
+
+        sections.append(
+            f"Verified Claims: "
+            f"{candidate_intelligence.get('verified_claims', 0)}"
+        )
+
+        sections.append(
+            f"Claims Needing Review: "
+            f"{candidate_intelligence.get('needs_review_claims', 0)}"
+        )
+
+        sections.append(
+            f"Contradicted Claims: "
+            f"{candidate_intelligence.get('contradicted_claims', 0)}"
+        )
+
+        sections.append(
+            f"Suspicious Claims: "
+            f"{candidate_intelligence.get('suspicious_claim_count', 0)}"
+        )
+
+        sections.append(
+            f"Overall Evidence Score: "
+            f"{candidate_intelligence.get('overall_evidence_score', 0)}"
+        )
+
+        sections.append(
+            f"Evidence Level: "
+            f"{candidate_intelligence.get('evidence_level', 'none')}"
+        )
+
+    # ========================================================
+    # RESUME
+    # ========================================================
+
+    sections.append(
+        "\n===== RESUME TEXT ====="
+    )
+
+    sections.append(
+        (resume_text or "").strip()
+    )
+
+    # ========================================================
+    # IDENTITY
+    # ========================================================
+
+    sections.append(
+        "\n===== IDENTITY ====="
+    )
+
+    sections.append(
+        _safe_json(identity)
+    )
+
+    # ========================================================
+    # CLAIMS
+    # ========================================================
+
+    sections.append(
+        "\n===== EXTRACTED CLAIMS ====="
+    )
+
+    if claims:
+
+        for i, claim in enumerate(
+            claims,
+            start=1,
+        ):
+
+            if not isinstance(
+                claim,
+                dict,
+            ):
+                continue
+
+            final_status = claim.get(
+                "status",
+                claim.get(
+                    "rag_status",
+                    "needs_review",
+                ),
+            )
+
+            sections.append(
+                f'{i}. "{claim.get("claim", "")}" '
+                f'— status: {final_status} '
+                f'— RAG confidence: '
+                f'{claim.get("rag_confidence", 0)}'
+            )
+
+    else:
+
+        sections.append(
+            "No claims were extracted from the resume."
+        )
+
+    # ========================================================
+    # GITHUB
+    # ========================================================
+
+    sections.append(
+        "\n===== GITHUB EVIDENCE ====="
+    )
+
+    sections.append(
+        _safe_json(github_evidence)
+    )
+
+    # ========================================================
+    # LINKEDIN
+    # ========================================================
+
+    sections.append(
+        "\n===== LINKEDIN EVIDENCE ====="
+    )
+
+    sections.append(
+        _safe_json(linkedin_evidence)
+    )
+
+    # ========================================================
+    # CANDIDATE INTELLIGENCE
+    # ========================================================
+
+    sections.append(
+        "\n===== CANDIDATE INTELLIGENCE ====="
+    )
+
+    sections.append(
+        _safe_json(candidate_intelligence)
+    )
+
+    # ========================================================
+    # SKILL MAPPING
+    # ========================================================
+
+    sections.append(
+        "\n===== SKILL TO REPOSITORY MAPPING ====="
+    )
+
+    sections.append(
+        _safe_json(skill_repository_mapping)
+    )
+
+    # ========================================================
+    # PROJECT MAPPING
+    # ========================================================
+
+    sections.append(
+        "\n===== PROJECT TO REPOSITORY MAPPING ====="
+    )
+
+    sections.append(
+        _safe_json(project_repository_mapping)
+    )
+
+    return "\n".join(sections)
+
+
+# ============================================================
+# Recruiter Prompt
+# ============================================================
+
+def build_recruiter_prompt(
+    question,
+    candidate_knowledge,
+):
+
+    return (
+        "You are PersonaDNA's evidence-based recruiting assistant.\n\n"
+
+        "Your job is to answer recruiter questions using ONLY "
+        "the candidate evidence provided below.\n\n"
+
+        "STRICT RULES:\n"
+        "1. Never invent candidate information.\n"
+        "2. Never assume that a resume claim is true merely "
+        "because it appears on the resume.\n"
+        "3. Treat status='supported' as externally supported.\n"
+        "4. Treat status='needs_review' as unverified, NOT false.\n"
+        "5. Treat status='contradicted' as conflicting evidence.\n"
+        "6. Do not call a claim suspicious unless the evidence "
+        "explicitly contains a risk signal.\n"
+        "7. If evidence is insufficient, clearly say that "
+        "additional verification is required.\n"
+        "8. Do not make predictions about the candidate's "
+        "future performance.\n"
+        "9. Do not reinterpret or recalculate the official "
+        "PersonaDNA Trust Score.\n"
+        "10. Use the official PersonaDNA scores exactly as provided.\n\n"
+
+        "IMPORTANT DATE RULE:\n"
+        "Do not describe a date as suspicious, future-dated, "
+        "incorrect, or anomalous unless PersonaDNA's evidence "
+        "explicitly identifies it as a date anomaly.\n\n"
+
+        "===== CANDIDATE KNOWLEDGE =====\n"
+        f"{candidate_knowledge}\n\n"
+
+        "===== RECRUITER QUESTION =====\n"
+        f"{question}\n\n"
+
+        "===== ANSWER =====\n"
+    )
+
+
+# ============================================================
+# Safe JSON
+# ============================================================
+
+def _safe_json(value) -> str:
+
+    try:
+
+        return json.dumps(
+            value,
+            indent=2,
+            default=str,
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return str(value)

@@ -1,35 +1,26 @@
-# ============================================================
 # PersonaDNA - Risk Engine
-# ============================================================
 
 
 def clamp_score(score: int) -> int:
-    return max(
-        0,
-        min(
-            100,
-            int(score),
-        ),
-    )
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        score = 0
+    return max(0, min(100, score))
 
 
-def classify_risk(
-    score: int,
-) -> str:
+def classify_risk(score: int) -> str:
+    """Classify claim risk: lower score = lower risk."""
+    score = clamp_score(score)
 
     if score >= 70:
         return "High"
-
     if score >= 40:
         return "Medium"
-
     return "Low"
 
 
-def recommended_action(
-    level: str,
-) -> str:
-
+def recommended_action(level: str) -> str:
     if level == "High":
         return (
             "Additional verification is recommended "
@@ -42,10 +33,25 @@ def recommended_action(
             "or technical evidence."
         )
 
-    return (
-        "No immediate additional verification "
-        "is required."
-    )
+    return "No immediate additional verification is required."
+
+
+def _safe_bool(value) -> bool:
+    """Avoid bool('false') incorrectly evaluating to True."""
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+
+    return bool(value)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def calculate_claim_risk(
@@ -54,144 +60,98 @@ def calculate_claim_risk(
     identity: dict,
 ) -> dict:
 
-    claim_name = str(
-        claim.get(
-            "claim",
-            "",
-        )
-    ).strip()
+    claim = claim if isinstance(claim, dict) else {}
+    evidence = evidence if isinstance(evidence, dict) else {}
+    identity = identity if isinstance(identity, dict) else {}
 
-    claim_type = claim.get(
-        "type",
-        "",
-    )
+    claim_name = str(claim.get("claim", "")).strip()
+    claim_type = str(claim.get("type", "")).strip().lower()
 
-    evidence_score = int(
-        evidence.get(
-            "score",
-            0,
-        )
+    evidence_score = clamp_score(
+        _safe_int(evidence.get("score", 0))
     )
 
     evidence_level = str(
         evidence.get(
             "level",
-            "None",
+            evidence.get("strength", "None"),
         )
-    )
+    ).strip()
 
-    github_repository_count = int(
-        evidence.get(
-            "github_repository_count",
-            0,
-        )
+    github_repository_count = max(
+        0,
+        _safe_int(evidence.get("github_repository_count", 0)),
     )
 
     github_username = str(
-        identity.get(
-            "github_username",
-            "",
-        )
+        identity.get("github_username", "")
     ).strip()
 
-    github_match = bool(
-        identity.get(
-            "github_match",
-            False,
-        )
+    github_match = _safe_bool(
+        identity.get("github_match", False)
     )
 
     linkedin_username = str(
-        identity.get(
-            "linkedin_username",
-            "",
-        )
+        identity.get("linkedin_username", "")
     ).strip()
 
-    linkedin_match = bool(
-        identity.get(
-            "linkedin_match",
-            False,
-        )
+    linkedin_match = _safe_bool(
+        identity.get("linkedin_match", False)
     )
 
     risk_score = 0
     reasons = []
 
     # ========================================================
-    # Base risk from evidence
+    # 1. BASE RISK FROM EVIDENCE
     # ========================================================
 
     if evidence_score >= 80:
-
         risk_score = 10
-
-        reasons.append(
-            "Strong external evidence supports the claim."
-        )
+        reasons.append("Strong external evidence supports the claim.")
 
     elif evidence_score >= 60:
-
         risk_score = 20
-
-        reasons.append(
-            "Moderate external evidence supports the claim."
-        )
+        reasons.append("Moderate external evidence supports the claim.")
 
     elif evidence_score >= 40:
-
         risk_score = 35
-
-        reasons.append(
-            "Some external evidence supports the claim."
-        )
+        reasons.append("Some external evidence supports the claim.")
 
     elif evidence_score >= 20:
-
         risk_score = 50
-
         reasons.append(
             "Only limited external evidence supports the claim."
         )
 
     else:
-
         risk_score = 65
-
-        reasons.append(
-            "No supporting external evidence was found."
-        )
+        reasons.append("No supporting external evidence was found.")
 
     # ========================================================
-    # Repository support
+    # 2. REPOSITORY SUPPORT
     # ========================================================
 
     if github_repository_count >= 3:
-
         risk_score -= 15
-
         reasons.append(
             "The claim is supported across multiple repositories."
         )
 
     elif github_repository_count == 2:
-
         risk_score -= 10
-
         reasons.append(
             "The claim is supported across multiple repositories."
         )
 
     elif github_repository_count == 1:
-
         risk_score -= 5
-
         reasons.append(
             "The claim has repository-level GitHub evidence."
         )
 
     # ========================================================
-    # Identity attribution
+    # 3. IDENTITY ATTRIBUTION
     # ========================================================
 
     if (
@@ -199,12 +159,10 @@ def calculate_claim_risk(
         and not github_match
         and github_repository_count > 0
     ):
-
         risk_score += 15
-
         reasons.append(
-            "GitHub evidence exists, but the supplied "
-            "GitHub identity does not match the resume identity."
+            "GitHub evidence exists, but the supplied GitHub identity "
+            "does not match the resume identity."
         )
 
     elif (
@@ -212,41 +170,34 @@ def calculate_claim_risk(
         and not github_match
         and github_repository_count == 0
     ):
-
         risk_score += 5
-
         reasons.append(
             "The supplied GitHub identity does not match "
             "the resume identity."
         )
 
-    # LinkedIn is only a secondary signal until Step 5.
+    # LinkedIn is a secondary claim-level signal.
     if (
         linkedin_username
         and not linkedin_match
         and claim_type == "skill"
     ):
-
         risk_score += 3
-
         reasons.append(
             "The supplied LinkedIn identity does not match "
             "the resume identity."
         )
 
     # ========================================================
-    # Claim type
+    # 4. CLAIM TYPE
     # ========================================================
 
-    if claim_type in {
-        "education",
-        "certification",
-    }:
+    if claim_type in {"education", "certification"}:
 
+        # Lack of supported verification should remain a review-level
+        # issue rather than automatically becoming high risk.
         if evidence_score == 0:
-
             risk_score = 45
-
             reasons.append(
                 "External education/certification verification "
                 "is not available in the current system."
@@ -255,58 +206,44 @@ def calculate_claim_risk(
     elif claim_type == "project":
 
         if github_repository_count == 0:
-
-            risk_score = 50
-
+            # A project without repository evidence is high-risk.
+            risk_score = max(risk_score, 80)
             reasons.append(
                 "No supporting GitHub repository was matched "
                 "to this project."
             )
 
         else:
-
             risk_score -= 10
-
             reasons.append(
                 "A GitHub repository provides project evidence."
             )
 
     # ========================================================
-    # Prevent strong evidence from becoming high risk
-    # only because of identity attribution.
+    # 5. EVIDENCE SAFETY CAP
+    #
+    # Strong evidence must not become high risk solely because
+    # of identity attribution.
     # ========================================================
 
     if (
         evidence_score >= 80
         and github_repository_count > 0
     ):
-
-        risk_score = min(
-            risk_score,
-            55,
-        )
+        risk_score = min(risk_score, 55)
 
     elif (
         evidence_score >= 40
         and github_repository_count > 0
     ):
-
-        risk_score = min(
-            risk_score,
-            65,
-        )
+        risk_score = min(risk_score, 65)
 
     # ========================================================
-    # Final
+    # 6. FINAL
     # ========================================================
 
-    risk_score = clamp_score(
-        risk_score
-    )
-
-    risk_level = classify_risk(
-        risk_score
-    )
+    risk_score = clamp_score(risk_score)
+    risk_level = classify_risk(risk_score)
 
     return {
         "claim": claim_name,
@@ -317,14 +254,12 @@ def calculate_claim_risk(
         "evidence_level": evidence_level,
         "github_repository_count": github_repository_count,
         "reasons": reasons,
-        "recommended_action": recommended_action(
-            risk_level
-        ),
+        "recommended_action": recommended_action(risk_level),
     }
 
 
 # ============================================================
-# Build risk report
+# BUILD RISK REPORT
 # ============================================================
 
 def build_risk_report(
@@ -333,30 +268,36 @@ def build_risk_report(
     identity: dict,
 ) -> list[dict]:
 
-    evidence_by_claim = {
-        str(item.get("claim", "")).strip().lower(): item
-        for item in evidence_report
-    }
+    claims = claims if isinstance(claims, list) else []
+    evidence_report = (
+        evidence_report if isinstance(evidence_report, list) else []
+    )
+    identity = identity if isinstance(identity, dict) else {}
+
+    evidence_by_claim = {}
+
+    for item in evidence_report:
+        if not isinstance(item, dict):
+            continue
+
+        claim_key = str(item.get("claim", "")).strip().lower()
+
+        if claim_key:
+            evidence_by_claim[claim_key] = item
 
     report = []
 
     for claim in claims:
+        if not isinstance(claim, dict):
+            continue
 
-        claim_name = str(
-            claim.get(
-                "claim",
-                "",
-            )
-        ).strip()
+        claim_name = str(claim.get("claim", "")).strip()
 
-        # Only use evidence that actually exists
-        # in the authoritative report.
-        evidence = evidence_by_claim.get(
-            claim_name.lower()
-        )
+        # Only use evidence that actually exists in the
+        # authoritative evidence report.
+        evidence = evidence_by_claim.get(claim_name.lower())
 
         if evidence is None:
-
             evidence = {
                 "score": 0,
                 "level": "None",
@@ -375,51 +316,45 @@ def build_risk_report(
 
 
 # ============================================================
-# Summary
+# SUMMARY
 # ============================================================
 
 def calculate_risk_summary(
     risk_report: list[dict],
 ) -> dict:
 
+    risk_report = (
+        risk_report if isinstance(risk_report, list) else []
+    )
+
     low = sum(
         1
         for item in risk_report
-        if item.get(
-            "risk_level"
-        ) == "Low"
+        if item.get("risk_level") == "Low"
     )
 
     medium = sum(
         1
         for item in risk_report
-        if item.get(
-            "risk_level"
-        ) == "Medium"
+        if item.get("risk_level") == "Medium"
     )
 
     high = sum(
         1
         for item in risk_report
-        if item.get(
-            "risk_level"
-        ) == "High"
+        if item.get("risk_level") == "High"
     )
 
     if high > 0:
         overall = "High"
-
     elif medium > 0:
         overall = "Medium"
-
     else:
         overall = "Low"
 
     return {
         "overall_risk": overall,
-        "total_claims": len(
-            risk_report
-        ),
+        "total_claims": len(risk_report),
         "low_risk_claims": low,
         "medium_risk_claims": medium,
         "high_risk_claims": high,

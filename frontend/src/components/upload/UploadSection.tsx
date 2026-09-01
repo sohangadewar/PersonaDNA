@@ -120,7 +120,7 @@ export default function UploadSection({
   const connectLinkedIn = () => {
   window.location.href =
     "https://personadna.onrender.com/linkedin/connect";
-};;
+};
 
   // ============================================================
   // GENERATE DIGITAL DNA
@@ -193,18 +193,37 @@ const handleGenerate = async () => {
 
     onGenerate(response.data);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "PersonaDNA analysis failed:",
       error
     );
 
+    console.error(
+      "Response:",
+      error?.response?.data
+    );
+
+    console.error(
+      "Status:",
+      error?.response?.status
+    );
+
+    console.error(
+      "Message:",
+      error?.message
+    );
+
     alert(
-      "Unable to analyze your profile. Please make sure the PersonaDNA backend is running."
+      `Analysis failed: ${
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Unknown error"
+      }`
     );
 
   } finally {
-    setIsGenerating(false);
+     setIsGenerating(false);
   }
 };
   // ============================================================

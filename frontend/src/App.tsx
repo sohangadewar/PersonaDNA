@@ -43,15 +43,17 @@ function App() {
       <HowItWorks />
 
       <UploadSection
-        onGenerate={(data: CandidateReport) => {
-          console.log(
-            "PersonaDNA Report:",
-            data
-          );
+       onGenerate={(data: CandidateReport) => {
+  console.log("========== APP REPORT DEBUG ==========");
+  console.log("Full report:", data);
+  console.log("verified_claims:", data.verified_claims);
+  console.log("claim_stats:", data.claim_stats);
+  console.log("supported:", data.claim_stats?.supported);
+  console.log("======================================");
 
-          setReport(data);
-          setScreen("processing");
-        }}
+  setReport(data);
+  setScreen("processing");
+}}
       />
     </div>
   );

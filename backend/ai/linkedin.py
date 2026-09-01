@@ -123,13 +123,13 @@ def analyze_linkedin_evidence(
     integration after member consent.
     """
 
-    
+
 
     if not consent_granted:
         return linkedin_unavailable(
             linkedin_url,
             "consent_required",
-            
+
         )
 
     if not isinstance(profile_data, dict):
@@ -480,7 +480,61 @@ def linkedin_supports_education(
 
     return False
 
+# ============================================================
+# Certification evidence
+# ============================================================
 
+def linkedin_supports_certification(
+    certificate: str,
+    linkedin_evidence: dict,
+) -> bool:
+    """
+    Verify a certification using authorized LinkedIn
+    certification data.
+
+    Credential ID and credential URL are NOT required.
+
+    The certificate title itself is sufficient for this
+    matching layer when returned by the authorized source.
+    """
+
+    if not linkedin_evidence.get(
+        "authorized_source",
+        False,
+    ):
+        return False
+
+    target = normalize_text(
+        certificate
+    )
+
+    if not target:
+        return False
+
+    for linkedin_certificate in (
+        linkedin_evidence.get(
+            "certifications",
+            [],
+        )
+    ):
+
+        candidate = normalize_text(
+            linkedin_certificate
+        )
+
+        if not candidate:
+            continue
+
+        if candidate == target:
+            return True
+
+        if (
+            target in candidate
+            or candidate in target
+        ):
+            return True
+
+    return False
 # ============================================================
 # Add LinkedIn evidence to claims
 # ============================================================
@@ -533,6 +587,71 @@ def enrich_claims_with_linkedin(
                 linkedin_evidence,
             )
 
+                   # ----------------------------------------------------
+        # Certifications
+        # ----------------------------------------------------
+
+        elif claim_type == "certification":
+
+            claim_title = str(
+                claim.get(
+                    "certificate_title",
+                    claim.get(
+                        "claim",
+                        "",
+                    ),
+                )
+            )
+
+            target = normalize_text(
+                claim_title
+            )
+
+            matched_certificate = False
+
+            if linkedin_evidence.get(
+                "authorized_source",
+                False,
+            ):
+
+                for linkedin_certificate in (
+                    linkedin_evidence.get(
+                        "certifications",
+                        [],
+                    )
+                ):
+
+                    linkedin_certificate_text = normalize_text(
+                        linkedin_certificate
+                    )
+
+                    if not linkedin_certificate_text:
+                        continue
+
+                    # Exact title match
+                    if (
+                        linkedin_certificate_text
+                        == target
+                    ):
+                        matched_certificate = True
+                        break
+
+                    # Safe partial matching for issuer/title
+                    if (
+                        target
+                        and (
+                            target in linkedin_certificate_text
+                            or linkedin_certificate_text in target
+                        )
+                    ):
+                        matched_certificate = True
+                        break
+
+            claim[
+                "evidence"
+            ][
+                "linkedin"
+            ] = matched_certificate
         # ----------------------------------------------------
         # Everything else remains unverified until
         # we have structured matching logic for that claim.
@@ -606,10 +725,10 @@ def build_linkedin_summary(
 
     return {
         "status": status,
-        
-        
-        
-        
+
+
+
+
         "authorized": bool(
             linkedin_evidence.get(
                 "authorized_source",

@@ -1,11 +1,17 @@
-import base64
 import os
+import base64
 from urllib.parse import urlparse
 
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = BASE_DIR / "backend" / ".env"
+
+load_dotenv(ENV_FILE)
 
 GITHUB_API = "https://api.github.com"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -14,6 +20,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 # ============================================================
 # GitHub Username
 # ============================================================
+
 
 def extract_github_username(github_url: str) -> str:
     if not github_url:
@@ -73,10 +80,7 @@ def github_get(url: str, params: dict | None = None):
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset = response.headers.get("X-RateLimit-Reset")
 
-            print(
-                f"GitHub rate limit. "
-                f"Remaining={remaining}, Reset={reset}"
-            )
+            print(f"GitHub rate limit. " f"Remaining={remaining}, Reset={reset}")
 
             return None
 
@@ -99,6 +103,7 @@ def github_get(url: str, params: dict | None = None):
 # Get File Content
 # ============================================================
 
+
 def get_file_content(
     owner: str,
     repo_name: str,
@@ -109,10 +114,7 @@ def get_file_content(
     from a GitHub repository.
     """
 
-    url = (
-        f"{GITHUB_API}/repos/"
-        f"{owner}/{repo_name}/contents/{file_path}"
-    )
+    url = f"{GITHUB_API}/repos/" f"{owner}/{repo_name}/contents/{file_path}"
 
     data = github_get(url)
 
@@ -125,9 +127,7 @@ def get_file_content(
         return ""
 
     try:
-        return base64.b64decode(
-            encoded_content
-        ).decode(
+        return base64.b64decode(encoded_content).decode(
             "utf-8",
             errors="ignore",
         )
@@ -139,6 +139,7 @@ def get_file_content(
 # ============================================================
 # Dependency Detection
 # ============================================================
+
 
 def detect_dependencies(
     owner: str,
@@ -153,18 +154,13 @@ def detect_dependencies(
     technologies = []
     dependency_files = {}
 
-    normalized_files = {
-        file.lower(): file
-        for file in files
-    }
+    normalized_files = {file.lower(): file for file in files}
 
     # --------------------------------------------------------
     # requirements.txt
     # --------------------------------------------------------
 
-    requirements_file = normalized_files.get(
-        "requirements.txt"
-    )
+    requirements_file = normalized_files.get("requirements.txt")
 
     if requirements_file:
 
@@ -174,9 +170,7 @@ def detect_dependencies(
             requirements_file,
         )
 
-        dependency_files["requirements.txt"] = bool(
-            content
-        )
+        dependency_files["requirements.txt"] = bool(content)
 
         content_lower = content.lower()
 
@@ -204,9 +198,7 @@ def detect_dependencies(
     # package.json
     # --------------------------------------------------------
 
-    package_file = normalized_files.get(
-        "package.json"
-    )
+    package_file = normalized_files.get("package.json")
 
     if package_file:
 
@@ -216,9 +208,7 @@ def detect_dependencies(
             package_file,
         )
 
-        dependency_files["package.json"] = bool(
-            content
-        )
+        dependency_files["package.json"] = bool(content)
 
         content_lower = content.lower()
 
@@ -242,9 +232,7 @@ def detect_dependencies(
     # Dockerfile
     # --------------------------------------------------------
 
-    dockerfile = normalized_files.get(
-        "dockerfile"
-    )
+    dockerfile = normalized_files.get("dockerfile")
 
     if dockerfile:
 
@@ -255,9 +243,7 @@ def detect_dependencies(
     # pyproject.toml
     # --------------------------------------------------------
 
-    pyproject = normalized_files.get(
-        "pyproject.toml"
-    )
+    pyproject = normalized_files.get("pyproject.toml")
 
     if pyproject:
 
@@ -267,9 +253,7 @@ def detect_dependencies(
             pyproject,
         )
 
-        dependency_files["pyproject.toml"] = bool(
-            content
-        )
+        dependency_files["pyproject.toml"] = bool(content)
 
         content_lower = content.lower()
 
@@ -288,16 +272,145 @@ def detect_dependencies(
                 technologies.append(technology)
 
     return {
-        "technologies": list(
-            dict.fromkeys(technologies)
-        ),
+        "technologies": list(dict.fromkeys(technologies)),
         "dependency_files": dependency_files,
     }
+
+
+def enrich_claims_with_github(
+    claims: list,
+    github_evidence: dict,
+) -> list:
+    """
+    Enrich resume claims using GitHub evidence.
+    """
+
+    if not isinstance(claims, list):
+        return []
+
+    if not isinstance(github_evidence, dict):
+        github_evidence = {}
+
+    technology_evidence = github_evidence.get(
+        "technology_evidence",
+        [],
+    )
+
+    if not isinstance(technology_evidence, list):
+        technology_evidence = []
+
+    technologies = {str(item).strip().lower() for item in technology_evidence if item}
+
+    repositories = github_evidence.get(
+        "repositories",
+        [],
+    )
+
+    if not isinstance(repositories, list):
+        repositories = []
+
+    for claim in claims:
+
+        if not isinstance(claim, dict):
+            continue
+
+        claim_text = str(claim.get("claim", "")).strip()
+
+        if not claim_text:
+            continue
+
+        claim_lower = claim_text.lower()
+
+        github_match = False
+
+        matched_technology = None
+
+        # ---------------------------------------------
+        # Technology evidence
+        # ---------------------------------------------
+
+        for technology in technologies:
+
+            if technology and technology in claim_lower:
+                github_match = True
+                matched_technology = technology
+                break
+
+        # ---------------------------------------------
+        # Repository evidence
+        # ---------------------------------------------
+
+        if not github_match:
+
+            for repository in repositories:
+
+                if not isinstance(repository, dict):
+                    continue
+
+                repo_name = str(repository.get("name", "")).lower()
+
+                repo_description = str(repository.get("description", "")).lower()
+
+                repo_technologies = repository.get(
+                    "technologies",
+                    [],
+                )
+
+                if not isinstance(
+                    repo_technologies,
+                    list,
+                ):
+                    repo_technologies = []
+
+                searchable_text = " ".join(
+                    [
+                        repo_name,
+                        repo_description,
+                        " ".join(str(x).lower() for x in repo_technologies),
+                    ]
+                )
+
+                if any(
+                    word in searchable_text
+                    for word in claim_lower.split()
+                    if len(word) > 3
+                ):
+                    github_match = True
+                    break
+
+        # ---------------------------------------------
+        # Store evidence
+        # ---------------------------------------------
+
+        evidence = claim.get(
+            "evidence",
+            {},
+        )
+
+        if not isinstance(evidence, dict):
+            evidence = {}
+
+        evidence["github"] = github_match
+
+        claim["evidence"] = evidence
+
+        if github_match:
+
+            claim["github_evidence"] = {
+                "source": "github",
+                "verified": True,
+            }
+
+            if matched_technology:
+                claim["github_evidence"]["technology"] = matched_technology
+
+    return claims
 
 
 # ============================================================
 # Repository Analysis
 # ============================================================
+
 
 def analyze_repository(
     username: str,
@@ -317,13 +430,9 @@ def analyze_repository(
         username,
     )
 
-    language = repository.get(
-        "language"
-    )
+    language = repository.get("language")
 
-    description = repository.get(
-        "description"
-    )
+    description = repository.get("description")
 
     stars = repository.get(
         "stargazers_count",
@@ -335,25 +444,19 @@ def analyze_repository(
         0,
     )
 
-    updated_at = repository.get(
-        "updated_at"
-    )
+    updated_at = repository.get("updated_at")
 
     # --------------------------------------------------------
     # Languages
     # --------------------------------------------------------
 
-    languages_url = repository.get(
-        "languages_url"
-    )
+    languages_url = repository.get("languages_url")
 
     languages = {}
 
     if languages_url:
 
-        language_data = github_get(
-            languages_url
-        )
+        language_data = github_get(languages_url)
 
         if isinstance(
             language_data,
@@ -365,31 +468,19 @@ def analyze_repository(
     # README
     # --------------------------------------------------------
 
-    readme_url = (
-        f"{GITHUB_API}/repos/"
-        f"{owner}/{repo_name}/readme"
-    )
+    readme_url = f"{GITHUB_API}/repos/" f"{owner}/{repo_name}/readme"
 
-    readme_data = github_get(
-        readme_url
-    )
+    readme_data = github_get(readme_url)
 
-    has_readme = bool(
-        readme_data
-    )
+    has_readme = bool(readme_data)
 
     # --------------------------------------------------------
     # Repository Contents
     # --------------------------------------------------------
 
-    contents_url = (
-        f"{GITHUB_API}/repos/"
-        f"{owner}/{repo_name}/contents"
-    )
+    contents_url = f"{GITHUB_API}/repos/" f"{owner}/{repo_name}/contents"
 
-    contents = github_get(
-        contents_url
-    )
+    contents = github_get(contents_url)
 
     files = []
 
@@ -398,11 +489,7 @@ def analyze_repository(
         list,
     ):
 
-        files = [
-            item.get("name", "")
-            for item in contents
-            if item.get("name")
-        ]
+        files = [item.get("name", "") for item in contents if item.get("name")]
 
     # --------------------------------------------------------
     # Basic Technology Detection
@@ -477,13 +564,9 @@ def analyze_repository(
         files,
     )
 
-    technologies.extend(
-        dependency_result["technologies"]
-    )
+    technologies.extend(dependency_result["technologies"])
 
-    technologies = list(
-        dict.fromkeys(technologies)
-    )
+    technologies = list(dict.fromkeys(technologies))
 
     # --------------------------------------------------------
     # RAG / Jarvis Evidence Detection
@@ -495,13 +578,9 @@ def analyze_repository(
         files,
     )
 
-    technologies.extend(
-        specialized_evidence["technologies"]
-    )
+    technologies.extend(specialized_evidence["technologies"])
 
-    technologies = list(
-        dict.fromkeys(technologies)
-    )
+    technologies = list(dict.fromkeys(technologies))
 
     # --------------------------------------------------------
     # Return Repository Evidence
@@ -513,9 +592,7 @@ def analyze_repository(
         "language": language,
         "languages": languages,
         "technologies": technologies,
-        "dependency_files": dependency_result[
-            "dependency_files"
-        ],
+        "dependency_files": dependency_result["dependency_files"],
         "specialized_evidence": specialized_evidence["evidence"],
         "files": files,
         "has_readme": has_readme,
@@ -531,6 +608,7 @@ def analyze_repository(
 # ============================================================
 # RAG + Jarvis Evidence Detection
 # ============================================================
+
 
 def detect_rag_and_jarvis_evidence(
     owner: str,
@@ -548,10 +626,7 @@ def detect_rag_and_jarvis_evidence(
         "jarvis": [],
     }
 
-    normalized_files = {
-        file.lower(): file
-        for file in files
-    }
+    normalized_files = {file.lower(): file for file in files}
 
     # --------------------------------------------------------
     # RAG indicators
@@ -600,10 +675,12 @@ def detect_rag_and_jarvis_evidence(
 
             if pattern in file_lower:
 
-                evidence["rag"].append({
-                    "file": original_file,
-                    "indicator": pattern,
-                })
+                evidence["rag"].append(
+                    {
+                        "file": original_file,
+                        "indicator": pattern,
+                    }
+                )
 
                 if "RAG" not in technologies:
                     technologies.append("RAG")
@@ -615,10 +692,12 @@ def detect_rag_and_jarvis_evidence(
 
             if pattern in file_lower:
 
-                evidence["jarvis"].append({
-                    "file": original_file,
-                    "indicator": pattern,
-                })
+                evidence["jarvis"].append(
+                    {
+                        "file": original_file,
+                        "indicator": pattern,
+                    }
+                )
 
                 if "Jarvis" not in technologies:
                     technologies.append("Jarvis")
@@ -637,9 +716,7 @@ def detect_rag_and_jarvis_evidence(
 
     for dependency_file in dependency_files_to_check:
 
-        actual_file = normalized_files.get(
-            dependency_file
-        )
+        actual_file = normalized_files.get(dependency_file)
 
         if not actual_file:
             continue
@@ -678,10 +755,12 @@ def detect_rag_and_jarvis_evidence(
 
             if dependency in content_lower:
 
-                evidence["rag"].append({
-                    "file": actual_file,
-                    "dependency": dependency,
-                })
+                evidence["rag"].append(
+                    {
+                        "file": actual_file,
+                        "dependency": dependency,
+                    }
+                )
 
                 if "RAG" not in technologies:
                     technologies.append("RAG")
@@ -704,10 +783,12 @@ def detect_rag_and_jarvis_evidence(
 
             if dependency in content_lower:
 
-                evidence["jarvis"].append({
-                    "file": actual_file,
-                    "dependency": dependency,
-                })
+                evidence["jarvis"].append(
+                    {
+                        "file": actual_file,
+                        "dependency": dependency,
+                    }
+                )
 
                 if "Jarvis" not in technologies:
                     technologies.append("Jarvis")
@@ -717,6 +798,7 @@ def detect_rag_and_jarvis_evidence(
         "evidence": evidence,
     }
 
+
 def analyze_github(
     github_url: str,
 ) -> dict:
@@ -725,9 +807,7 @@ def analyze_github(
     repository-level technology evidence.
     """
 
-    username = extract_github_username(
-        github_url
-    )
+    username = extract_github_username(github_url)
 
     # --------------------------------------------------------
     # Missing URL
@@ -748,13 +828,9 @@ def analyze_github(
     # Profile
     # --------------------------------------------------------
 
-    profile_url = (
-        f"{GITHUB_API}/users/{username}"
-    )
+    profile_url = f"{GITHUB_API}/users/{username}"
 
-    profile = github_get(
-        profile_url
-    )
+    profile = github_get(profile_url)
 
     if not profile:
 
@@ -771,10 +847,7 @@ def analyze_github(
     # Repositories
     # --------------------------------------------------------
 
-    repos_url = (
-        f"{GITHUB_API}/users/"
-        f"{username}/repos"
-    )
+    repos_url = f"{GITHUB_API}/users/" f"{username}/repos"
 
     repositories = github_get(
         repos_url,
@@ -817,9 +890,7 @@ def analyze_github(
             repository,
         )
 
-        analyzed_repositories.append(
-            analyzed
-        )
+        analyzed_repositories.append(analyzed)
 
     # --------------------------------------------------------
     # Technology Evidence
@@ -835,9 +906,7 @@ def analyze_github(
         ):
 
             if technology not in technology_evidence:
-                technology_evidence.append(
-                    technology
-                )
+                technology_evidence.append(technology)
 
     # --------------------------------------------------------
     # Final Result
@@ -846,24 +915,14 @@ def analyze_github(
     return {
         "username": username,
         "profile_found": True,
-        "display_name": profile.get(
-            "name"
-        ),
-        "bio": profile.get(
-            "bio"
-        ),
+        "display_name": profile.get("name"),
+        "bio": profile.get("bio"),
         "public_repositories": profile.get(
             "public_repos",
             0,
         ),
-        "repository_count": len(
-            analyzed_repositories
-        ),
+        "repository_count": len(analyzed_repositories),
         "repositories": analyzed_repositories,
         "technology_evidence": technology_evidence,
-        "evidence_status": (
-            "found"
-            if analyzed_repositories
-            else "no_repositories"
-        ),
+        "evidence_status": ("found" if analyzed_repositories else "no_repositories"),
     }
