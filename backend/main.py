@@ -9,7 +9,7 @@ from fastapi import (
 from backend.services.verifier import verify_candidate
 from backend.routes.linkedin import router as linkedin_router
 from fastapi.responses import RedirectResponse
-
+from fastapi.middleware.cors import CORSMiddleware
 from backend.ai.linkedin_oauth import (
     build_linkedin_authorization_url,
     exchange_code_for_token,
@@ -25,7 +25,17 @@ app = FastAPI(
     version="1.0.0",
     description="AI-powered candidate verification and trust analysis API.",
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://personadna-1.onrender.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(linkedin_router)
 
 @app.get("/linkedin/connect")
