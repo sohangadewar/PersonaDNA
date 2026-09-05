@@ -1,10 +1,14 @@
 import os
 import secrets
 from urllib.parse import urlencode
+from dotenv import load_dotenv
 
 import requests
 
-
+ENV_FILE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", ".env")
+)
+load_dotenv(ENV_FILE)
 # ============================================================
 # Configuration
 # ============================================================
