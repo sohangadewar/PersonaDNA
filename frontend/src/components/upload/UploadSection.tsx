@@ -159,19 +159,19 @@ const handleGenerate = async () => {
     );
 
     formData.append(
-      "github",
+      "github_url",
       github.trim()
     );
 
     // Send the complete authorized LinkedIn profile
     formData.append(
-      "linkedin_profile",
+      "linkedin_result",
       JSON.stringify(linkedinProfile)
     );
 
     // Send LinkedIn URL if available
     formData.append(
-      "linkedin",
+      "linkedin_url",
       linkedinProfile.profile_url || ""
     );
 

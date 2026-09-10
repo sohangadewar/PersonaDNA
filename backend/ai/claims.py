@@ -1,9 +1,9 @@
 ﻿import re
 
+
 # ============================================================
 # Helpers
 # ============================================================
-
 
 def normalize_space(text: str) -> str:
     return re.sub(
@@ -17,16 +17,73 @@ def contains_term(
     text: str,
     term: str,
 ) -> bool:
+    """
+    Strict technology/skill matching.
 
-    pattern = r"(?<![A-Za-z0-9+#])" + re.escape(term) + r"(?![A-Za-z0-9+#])"
+    Examples:
+        Java       -> matches "Java"
+        Java       -> DOES NOT match "JavaScript"
+        SQL        -> matches "SQL"
+        SQL        -> DOES NOT match "SQLAlchemy"
+        JavaScript -> matches "JavaScript"
+    """
+
+    text = text or ""
+    term = normalize_space(term)
+
+    if not text or not term:
+        return False
+
+    pattern = (
+        r"(?<![A-Za-z0-9+#])"
+        + re.escape(term)
+        + r"(?![A-Za-z0-9+#])"
+    )
 
     return (
         re.search(
             pattern,
-            text or "",
+            text,
             re.IGNORECASE,
         )
         is not None
+    )
+
+
+def value_matches_skill(
+    candidate_value,
+    skill: str,
+) -> bool:
+    """
+    Safely checks one GitHub value against a claimed skill.
+
+    Handles strings, lists, tuples, sets and dictionaries.
+    """
+
+    if candidate_value is None:
+        return False
+
+    if isinstance(candidate_value, dict):
+        values = list(candidate_value.keys())
+
+        for value in candidate_value.values():
+            if isinstance(value, (str, int, float)):
+                values.append(str(value))
+
+        return any(
+            value_matches_skill(value, skill)
+            for value in values
+        )
+
+    if isinstance(candidate_value, (list, tuple, set)):
+        return any(
+            value_matches_skill(value, skill)
+            for value in candidate_value
+        )
+
+    return contains_term(
+        str(candidate_value),
+        skill,
     )
 
 
@@ -62,6 +119,39 @@ SKILL_PATTERNS = [
 
 
 # ============================================================
+# Canonical Skill Names
+# ============================================================
+
+CANONICAL_SKILLS = {
+    "AI": "Artificial Intelligence",
+    "Artificial Intelligence": "Artificial Intelligence",
+
+    "ML": "Machine Learning",
+    "Machine Learning": "Machine Learning",
+
+    "JS": "JavaScript",
+    "JavaScript": "JavaScript",
+
+    "TS": "TypeScript",
+    "TypeScript": "TypeScript",
+
+    "Postgres": "PostgreSQL",
+    "PostgreSQL": "PostgreSQL",
+}
+
+
+def canonicalize_skill(skill: str) -> str:
+    normalized = normalize_space(skill)
+
+    for name, canonical in CANONICAL_SKILLS.items():
+
+        if normalized.lower() == name.lower():
+            return canonical
+
+    return normalized
+
+
+# ============================================================
 # Education
 # ============================================================
 
@@ -91,7 +181,7 @@ CERTIFICATION_PATTERNS = [
 
 
 # ============================================================
-# Project technologies
+# Project Technologies
 # ============================================================
 
 PROJECT_TECHNOLOGIES = [
@@ -148,15 +238,16 @@ def extract_project_technologies(
 
 
 # ============================================================
-# Project name cleaning
+# Project Name Cleaning
 # ============================================================
-
 
 def clean_project_name(
     project_name: str,
 ) -> str:
 
-    value = normalize_space(project_name)
+    value = normalize_space(
+        project_name
+    )
 
     value = re.sub(
         r"^\s*\d+\s*[\.\):\-]\s*",
@@ -165,13 +256,14 @@ def clean_project_name(
     )
 
     value = re.sub(
-        r"^[\-\*\u2022\u2023\u25CF]+\s*",
+        r"^[\-\*•‣●]+\s*",
         "",
         value,
     )
 
     value = re.sub(
-        r"^(project|projects|personal projects)" r"\s*[:\-]?\s*",
+        r"^(project|projects|personal projects)"
+        r"\s*[:\-]?\s*",
         "",
         value,
         flags=re.IGNORECASE,
@@ -199,10 +291,16 @@ def clean_project_name(
         )
 
         if match:
-            value = value[: match.start()]
+
+            value = value[
+                :match.start()
+            ]
+
             break
 
-    value = value.strip(" :-|.,;")
+    value = value.strip(
+        " :-|.,;"
+    )
 
     if not value:
         return ""
@@ -227,9 +325,8 @@ def clean_project_name(
 
 
 # ============================================================
-# Project extraction
+# Project Extraction
 # ============================================================
-
 
 def extract_project_claims(
     resume_text: str,
@@ -237,14 +334,17 @@ def extract_project_claims(
 
     original_text = resume_text or ""
 
-    normalized_text = normalize_space(original_text)
+    normalized_text = normalize_space(
+        original_text
+    )
 
     projects = []
 
     section_match = re.search(
         r"(?:personal\s+projects|projects)"
         r"\s*:\s*"
-        r"(.*?)(?="
+        r"(.*?)"
+        r"(?="
         r"\b(?:work experience|experience|education|"
         r"skills|certifications|certificate)\b"
         r"|$)",
@@ -254,10 +354,18 @@ def extract_project_claims(
 
     if section_match:
 
-        section_text = section_match.group(1).strip()
+        section_text = (
+            section_match
+            .group(1)
+            .strip()
+        )
 
         numbered_matches = re.findall(
-            r"(?:^|\s)" r"(\d+)" r"\.\s*" r"(.+?)" r"(?=\s+\d+\.\s+|$)",
+            r"(?:^|\s)"
+            r"(\d+)"
+            r"\.\s*"
+            r"(.+?)"
+            r"(?=\s+\d+\.\s+|$)",
             section_text,
             re.IGNORECASE,
         )
@@ -266,7 +374,9 @@ def extract_project_claims(
 
             raw_project = raw_project.strip()
 
-            project_name = clean_project_name(raw_project)
+            project_name = clean_project_name(
+                raw_project
+            )
 
             if not project_name:
                 continue
@@ -277,7 +387,11 @@ def extract_project_claims(
                     "type": "project",
                     "status": "detected",
                     "project_text": raw_project,
-                    "technologies": (extract_project_technologies(raw_project)),
+                    "technologies": (
+                        extract_project_technologies(
+                            raw_project
+                        )
+                    ),
                 }
             )
 
@@ -291,7 +405,9 @@ def extract_project_claims(
 
     for raw_project in explicit_matches:
 
-        project_name = clean_project_name(raw_project)
+        project_name = clean_project_name(
+            raw_project
+        )
 
         if not project_name:
             continue
@@ -302,7 +418,11 @@ def extract_project_claims(
                 "type": "project",
                 "status": "detected",
                 "project_text": raw_project,
-                "technologies": (extract_project_technologies(raw_project)),
+                "technologies": (
+                    extract_project_technologies(
+                        raw_project
+                    )
+                ),
             }
         )
 
@@ -310,18 +430,21 @@ def extract_project_claims(
 
     for project in projects:
 
-        key = normalize_space(project["claim"]).lower()
+        key = normalize_space(
+            project["claim"]
+        ).lower()
 
         if key not in unique:
             unique[key] = project
 
-    return list(unique.values())
+    return list(
+        unique.values()
+    )
 
 
 # ============================================================
-# Certification extraction
+# Certification Extraction
 # ============================================================
-
 
 def extract_certification_claims(
     resume_text: str,
@@ -346,16 +469,23 @@ def extract_certification_claims(
     if not section_match:
         return certifications
 
-    section_text = section_match.group(1).strip()
+    section_text = (
+        section_match
+        .group(1)
+        .strip()
+    )
 
     entries = re.split(
-        r"\s*(?:\||•|▪|◦|●|\n)\s*" r"|\s+(?=\d+[\.\):\-]\s+)",
+        r"\s*(?:\||•|▪|◦|●|\n)\s*"
+        r"|\s+(?=\d+[\.\):\-]\s+)",
         section_text,
     )
 
     for entry in entries:
 
-        entry = normalize_space(entry)
+        entry = normalize_space(
+            entry
+        )
 
         if not entry:
             continue
@@ -373,20 +503,24 @@ def extract_certification_claims(
         )
 
         entry = re.sub(
-            r"\b(?:credential\s*)?(?:id|ID)" r"\s*[:#\-]?\s*\S+",
+            r"\b(?:credential\s*)?(?:id|ID)"
+            r"\s*[:#\-]?\s*\S+",
             "",
             entry,
             flags=re.IGNORECASE,
         )
 
         entry = re.sub(
-            r"\b(?:credential\s*)?(?:url|link)" r"\s*[:\-]?\s*\S+",
+            r"\b(?:credential\s*)?(?:url|link)"
+            r"\s*[:\-]?\s*\S+",
             "",
             entry,
             flags=re.IGNORECASE,
         )
 
-        entry = normalize_space(entry)
+        entry = normalize_space(
+            entry
+        )
 
         if not entry:
             continue
@@ -420,18 +554,21 @@ def extract_certification_claims(
 
     for certification in certifications:
 
-        key = normalize_space(certification["claim"]).lower()
+        key = normalize_space(
+            certification["claim"]
+        ).lower()
 
         if key not in unique:
             unique[key] = certification
 
-    return list(unique.values())
+    return list(
+        unique.values()
+    )
 
 
 # ============================================================
-# Main claim extraction
+# Main Claim Extraction
 # ============================================================
-
 
 def extract_claims(
     resume_text: str,
@@ -454,7 +591,9 @@ def extract_claims(
 
             claims.append(
                 {
-                    "claim": skill,
+                    "claim": canonicalize_skill(
+                        skill
+                    ),
                     "type": "skill",
                     "status": "detected",
                     "evidence": {
@@ -481,7 +620,9 @@ def extract_claims(
 
             claims.append(
                 {
-                    "claim": normalize_space(match.group(0)),
+                    "claim": normalize_space(
+                        match.group(0)
+                    ),
                     "type": "education",
                     "status": "detected",
                     "evidence": {
@@ -496,13 +637,21 @@ def extract_claims(
     # Certifications
     # --------------------------------------------------------
 
-    claims.extend(extract_certification_claims(text))
+    claims.extend(
+        extract_certification_claims(
+            text
+        )
+    )
 
     # --------------------------------------------------------
     # Projects
     # --------------------------------------------------------
 
-    claims.extend(extract_project_claims(text))
+    claims.extend(
+        extract_project_claims(
+            text
+        )
+    )
 
     # --------------------------------------------------------
     # Deduplicate
@@ -564,4 +713,518 @@ def extract_claims(
 
             unique[key] = claim
 
-    return list(unique.values())
+    return list(
+        unique.values()
+    )
+
+
+# ============================================================
+# GitHub Repository Helpers
+# ============================================================
+
+def get_repository_name(
+    repository: dict,
+) -> str:
+
+    if not isinstance(
+        repository,
+        dict,
+    ):
+        return ""
+
+    return normalize_space(
+        str(
+            repository.get(
+                "name",
+                repository.get(
+                    "repository",
+                    "",
+                ),
+            )
+        )
+    )
+
+
+def get_repository_values(
+    repository: dict,
+) -> list:
+
+    """
+    Collect only meaningful GitHub repository
+    technology-related fields.
+
+    Important:
+    We keep values separate so Java does not
+    accidentally match JavaScript.
+    """
+
+    if not isinstance(
+        repository,
+        dict,
+    ):
+        return []
+
+    values = []
+
+    fields = [
+        "technology",
+        "technologies",
+        "language",
+        "languages",
+        "topics",
+        "skills",
+    ]
+
+    for field in fields:
+
+        value = repository.get(
+            field
+        )
+
+        if value is None:
+            continue
+
+        if isinstance(
+            value,
+            dict,
+        ):
+
+            values.extend(
+                str(key)
+                for key in value.keys()
+            )
+
+        elif isinstance(
+            value,
+            (list, tuple, set),
+        ):
+
+            values.extend(
+                str(item)
+                for item in value
+            )
+
+        else:
+
+            values.append(
+                str(value)
+            )
+
+    return values
+
+
+# ============================================================
+# GitHub Claim Matching
+# ============================================================
+
+def match_github_claim(
+    claim: str,
+    github_evidence: dict,
+) -> dict:
+    """
+    Strictly match a claim against the actual GitHub
+    repository technology/language evidence.
+
+    Important:
+    Do NOT trust precomputed repository_matches because
+    those may contain false substring matches.
+
+    Examples:
+        Java       != JavaScript
+        SQL        != SQLAlchemy
+    """
+
+    result = {
+        "verified": False,
+        "repositories": [],
+        "repository_matches": [],
+        "technology_matches": [],
+    }
+
+    if not isinstance(
+        github_evidence,
+        dict,
+    ):
+        return result
+
+    claim = canonicalize_skill(claim)
+
+    if not claim:
+        return result
+
+    repositories = github_evidence.get(
+        "repositories",
+        [],
+    )
+
+    if isinstance(
+        repositories,
+        dict,
+    ):
+        repositories = list(
+            repositories.values()
+        )
+
+    if not isinstance(
+        repositories,
+        list,
+    ):
+        repositories = []
+
+    # --------------------------------------------------------
+    # Match ONLY against actual repository fields
+    # --------------------------------------------------------
+
+    for repository in repositories:
+
+        if not isinstance(
+            repository,
+            dict,
+        ):
+            continue
+
+        repository_name = get_repository_name(
+            repository
+        )
+
+        matched_values = []
+
+        # --------------------------------------------
+        # Technology
+        # --------------------------------------------
+
+        technology = repository.get(
+            "technology"
+        )
+
+        if technology is not None:
+
+            if value_matches_skill(
+                technology,
+                claim,
+            ):
+                matched_values.append(
+                    str(technology)
+                )
+
+        # --------------------------------------------
+        # Technologies
+        # --------------------------------------------
+
+        technologies = repository.get(
+            "technologies"
+        )
+
+        if technologies is not None:
+
+            if isinstance(
+                technologies,
+                dict,
+            ):
+                technology_values = list(
+                    technologies.keys()
+                )
+            elif isinstance(
+                technologies,
+                (list, tuple, set),
+            ):
+                technology_values = list(
+                    technologies
+                )
+            else:
+                technology_values = [
+                    technologies
+                ]
+
+            for value in technology_values:
+
+                value = str(value)
+
+                if contains_term(
+                    value,
+                    claim,
+                ):
+                    if value not in matched_values:
+                        matched_values.append(
+                            value
+                        )
+
+        # --------------------------------------------
+        # Primary language
+        # --------------------------------------------
+
+        language = repository.get(
+            "language"
+        )
+
+        if language is not None:
+
+            if contains_term(
+                str(language),
+                claim,
+            ):
+                if str(language) not in matched_values:
+                    matched_values.append(
+                        str(language)
+                    )
+
+        # --------------------------------------------
+        # Language statistics
+        # --------------------------------------------
+
+        languages = repository.get(
+            "languages"
+        )
+
+        if isinstance(
+            languages,
+            dict,
+        ):
+
+            for language_name in languages.keys():
+
+                language_name = str(
+                    language_name
+                )
+
+                if contains_term(
+                    language_name,
+                    claim,
+                ):
+                    if (
+                        language_name
+                        not in matched_values
+                    ):
+                        matched_values.append(
+                            language_name
+                        )
+
+        elif isinstance(
+            languages,
+            (list, tuple, set),
+        ):
+
+            for language_name in languages:
+
+                language_name = str(
+                    language_name
+                )
+
+                if contains_term(
+                    language_name,
+                    claim,
+                ):
+                    if (
+                        language_name
+                        not in matched_values
+                    ):
+                        matched_values.append(
+                            language_name
+                        )
+
+        # --------------------------------------------
+        # Topics
+        # --------------------------------------------
+
+        topics = repository.get(
+            "topics"
+        )
+
+        if topics is not None:
+
+            if isinstance(
+                topics,
+                (list, tuple, set),
+            ):
+                topic_values = topics
+            else:
+                topic_values = [
+                    topics
+                ]
+
+            for topic in topic_values:
+
+                topic = str(topic)
+
+                if contains_term(
+                    topic,
+                    claim,
+                ):
+                    if topic not in matched_values:
+                        matched_values.append(
+                            topic
+                        )
+
+        # --------------------------------------------
+        # Skills
+        # --------------------------------------------
+
+        skills = repository.get(
+            "skills"
+        )
+
+        if skills is not None:
+
+            if isinstance(
+                skills,
+                (list, tuple, set),
+            ):
+                skill_values = skills
+            else:
+                skill_values = [
+                    skills
+                ]
+
+            for skill in skill_values:
+
+                skill = str(skill)
+
+                if contains_term(
+                    skill,
+                    claim,
+                ):
+                    if skill not in matched_values:
+                        matched_values.append(
+                            skill
+                        )
+
+        # --------------------------------------------
+        # Save only genuine matches
+        # --------------------------------------------
+
+        if matched_values:
+
+            result["verified"] = True
+
+            if repository_name:
+
+                if (
+                    repository_name
+                    not in result[
+                        "repositories"
+                    ]
+                ):
+                    result[
+                        "repositories"
+                    ].append(
+                        repository_name
+                    )
+
+            result[
+                "repository_matches"
+            ].append(
+                {
+                    "repository": repository_name,
+                    "matched_evidence": (
+                        matched_values
+                    ),
+                }
+            )
+
+            for value in matched_values:
+
+                if (
+                    value
+                    not in result[
+                        "technology_matches"
+                    ]
+                ):
+                    result[
+                        "technology_matches"
+                    ].append(
+                        value
+                    )
+
+    # --------------------------------------------------------
+    # Global technology evidence
+    # --------------------------------------------------------
+
+    global_evidence = github_evidence.get(
+        "technology_evidence",
+        [],
+    )
+
+    if isinstance(
+        global_evidence,
+        dict,
+    ):
+        global_evidence = list(
+            global_evidence.keys()
+        )
+
+    if isinstance(
+        global_evidence,
+        (list, tuple, set),
+    ):
+
+        for technology in global_evidence:
+
+            technology = str(
+                technology
+            )
+
+            if contains_term(
+                technology,
+                claim,
+            ):
+
+                result["verified"] = True
+
+                if (
+                    technology
+                    not in result[
+                        "technology_matches"
+                    ]
+                ):
+                    result[
+                        "technology_matches"
+                    ].append(
+                        technology
+                    )
+
+    # --------------------------------------------------------
+    # Global skill evidence
+    # --------------------------------------------------------
+
+    skill_evidence = github_evidence.get(
+        "skill_evidence",
+        [],
+    )
+
+    if isinstance(
+        skill_evidence,
+        dict,
+    ):
+        skill_evidence = list(
+            skill_evidence.keys()
+        )
+
+    if isinstance(
+        skill_evidence,
+        (list, tuple, set),
+    ):
+
+        for skill in skill_evidence:
+
+            skill = str(skill)
+
+            if contains_term(
+                skill,
+                claim,
+            ):
+
+                result["verified"] = True
+
+                if (
+                    skill
+                    not in result[
+                        "technology_matches"
+                    ]
+                ):
+                    result[
+                        "technology_matches"
+                    ].append(
+                        skill
+                    )
+
+    return result

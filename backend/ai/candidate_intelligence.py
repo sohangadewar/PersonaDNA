@@ -153,145 +153,104 @@ def detect_suspicious_claims(
     identity,
     github_evidence,
 ):
+    """
+    Detect only genuine negative verification signals.
+
+    Missing GitHub/LinkedIn evidence is NOT suspicious. It means the
+    claim may need further verification. A claim becomes suspicious
+    only when PersonaDNA has an explicit contradiction or when
+    externally attributed GitHub evidence belongs to a mismatched
+    identity.
+    """
 
     suspicious = []
 
-    claims = claims or []
-    identity = identity or {}
-    github_evidence = github_evidence or {}
+    if not isinstance(claims, list):
+        claims = []
+    if not isinstance(identity, dict):
+        identity = {}
+    if not isinstance(github_evidence, dict):
+        github_evidence = {}
 
     github_profile_found = bool(
-        github_evidence.get(
-            "profile_found",
-            False,
-        )
+        github_evidence.get("profile_found", False)
     )
-
     github_match = bool(
-        identity.get(
-            "github_match",
-            False,
-        )
+        identity.get("github_match", False)
     )
 
     for claim in claims:
-
         if not isinstance(claim, dict):
             continue
 
-        claim_type = str(
-            claim.get(
-                "type",
-                "",
-            )
-        ).strip().lower()
-
-        # ----------------------------------------------------
-        # Suspicious detection currently focuses on skills.
-        # ----------------------------------------------------
-
-        if claim_type != "skill":
+        claim_text = str(claim.get("claim", "")).strip()
+        if not claim_text:
             continue
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # RAG / final status is authoritative.
-        #
-        # A supported claim must NEVER be marked suspicious.
-        # ----------------------------------------------------
 
         final_status = str(
             claim.get(
                 "status",
-                claim.get(
-                    "rag_status",
-                    "needs_review",
-                ),
+                claim.get("rag_status", "needs_review"),
             )
         ).strip().lower()
 
-        if final_status == "supported":
-            continue
-
-        evidence = claim.get(
-            "evidence",
-            {},
-        )
-
+        evidence = claim.get("evidence", {})
         if not isinstance(evidence, dict):
             evidence = {}
 
-        github_claim = (
-            evidence.get("github") is True
-        )
-
-        linkedin_claim = (
-            evidence.get("linkedin") is True
-        )
+        github_claim = evidence.get("github") is True
 
         reasons = []
+        risk = ""
 
-        # ----------------------------------------------------
-        # No external evidence
-        # ----------------------------------------------------
-
-        if (
-            not github_claim
-            and not linkedin_claim
-        ):
+        # Explicit contradiction = genuine suspicious signal.
+        if final_status == "contradicted":
             reasons.append(
-                "No external evidence found for this skill."
+                "Available evidence contradicts this claim."
             )
+            risk = "high"
 
-        # ----------------------------------------------------
-        # GitHub identity mismatch
-        #
-        # Only report mismatch when GitHub actually provided
-        # evidence for the claim.
-        # ----------------------------------------------------
+        # Honour explicit contradiction flags from upstream verification.
+        if (
+            claim.get("contradicted") is True
+            or claim.get("is_contradicted") is True
+            or str(claim.get("risk_signal", "")).strip().lower()
+            == "contradiction"
+        ) and not reasons:
+            reasons.append(
+                "The verification pipeline reported an explicit contradiction."
+            )
+            risk = "high"
 
+        # Identity mismatch matters only when GitHub actually supplied
+        # evidence for this specific claim.
         if (
             github_profile_found
             and github_claim
             and not github_match
         ):
             reasons.append(
-                "GitHub identity does not match "
-                "the resume identity."
+                "GitHub evidence for this claim is associated with an"
+                " identity that does not match the resume identity."
             )
+            risk = "high"
 
-        # ----------------------------------------------------
-        # Create suspicious record only when an actual reason
-        # exists.
-        # ----------------------------------------------------
+        # IMPORTANT: absence of external evidence is intentionally NOT
+        # added as a suspicious reason. It remains a needs_review case.
+        if not reasons:
+            continue
 
-        if reasons:
-
-            risk = "medium"
-
-            if (
-                github_profile_found
-                and github_claim
-                and not github_match
-            ):
-                risk = "high"
-
-            suspicious.append(
-                {
-                    "claim": claim.get(
-                        "claim",
-                        "",
-                    ),
-                    "type": "skill",
-                    "reasons": reasons,
-                    "risk": risk,
-                    "rag_status": final_status,
-                    "rag_confidence": claim.get(
-                        "rag_confidence",
-                        0,
-                    ),
-                }
-            )
+        suspicious.append(
+            {
+                "claim": claim_text,
+                "type": str(claim.get("type", "")).strip().lower(),
+                "reasons": reasons,
+                "risk": risk or "medium",
+                "status": final_status,
+                "rag_status": claim.get("rag_status", final_status),
+                "rag_confidence": claim.get("rag_confidence", 0),
+            }
+        )
 
     return suspicious
 
@@ -623,6 +582,158 @@ def build_candidate_knowledge(
         )
 
     # ========================================================
+    # CLAIM STATUS BREAKDOWN
+    # ========================================================
+
+    sections.append(
+        "\n===== AUTHORITATIVE CLAIM STATUS BREAKDOWN ====="
+    )
+
+    supported_claims = []
+    needs_review_claims = []
+    suspicious_claims = []
+    contradicted_claims = []
+
+    for claim in claims or []:
+
+        if not isinstance(claim, dict):
+            continue
+
+        claim_name = str(
+            claim.get("claim", "")
+        ).strip()
+
+        if not claim_name:
+            continue
+
+        final_status = str(
+            claim.get(
+                "status",
+                claim.get(
+                    "rag_status",
+                    "needs_review",
+                ),
+            )
+        ).strip().lower()
+
+        if final_status in {
+            "supported",
+            "verified",
+        }:
+            supported_claims.append(
+                claim_name
+            )
+
+        elif final_status in {
+            "contradicted",
+            "conflicting",
+        }:
+            contradicted_claims.append(
+                claim_name
+            )
+
+        elif final_status in {
+            "suspicious",
+            "high_risk",
+        }:
+            suspicious_claims.append(
+                claim_name
+            )
+
+        else:
+            needs_review_claims.append(
+                claim_name
+            )
+
+    # ========================================================
+    # SUPPORTED CLAIMS
+    # ========================================================
+
+    sections.append(
+        "\nSUPPORTED CLAIMS "
+        f"({len(supported_claims)}):"
+    )
+
+    if supported_claims:
+
+        for claim_name in supported_claims:
+            sections.append(
+                f"- {claim_name}"
+            )
+
+    else:
+
+        sections.append(
+            "- None"
+        )
+
+    # ========================================================
+    # CLAIMS NEEDING REVIEW
+    # ========================================================
+
+    sections.append(
+        "\nCLAIMS NEEDING REVIEW "
+        f"({len(needs_review_claims)}):"
+    )
+
+    if needs_review_claims:
+
+        for claim_name in needs_review_claims:
+            sections.append(
+                f"- {claim_name}"
+            )
+
+    else:
+
+        sections.append(
+            "- None"
+        )
+
+    # ========================================================
+    # SUSPICIOUS CLAIMS
+    # ========================================================
+
+    sections.append(
+        "\nSUSPICIOUS CLAIMS "
+        f"({len(suspicious_claims)}):"
+    )
+
+    if suspicious_claims:
+
+        for claim_name in suspicious_claims:
+            sections.append(
+                f"- {claim_name}"
+            )
+
+    else:
+
+        sections.append(
+            "- None"
+        )
+
+    # ========================================================
+    # CONTRADICTED CLAIMS
+    # ========================================================
+
+    sections.append(
+        "\nCONTRADICTED CLAIMS "
+        f"({len(contradicted_claims)}):"
+    )
+
+    if contradicted_claims:
+
+        for claim_name in contradicted_claims:
+            sections.append(
+                f"- {claim_name}"
+            )
+
+    else:
+
+        sections.append(
+            "- None"
+        )
+
+    # ========================================================
     # GITHUB
     # ========================================================
 
@@ -716,6 +827,16 @@ def build_recruiter_prompt(
         "9. Do not reinterpret or recalculate the official "
         "PersonaDNA Trust Score.\n"
         "10. Use the official PersonaDNA scores exactly as provided.\n\n"
+        "11. When discussing claim verification, ALWAYS name "
+        "the specific claims involved.\n"
+        "12. Never report only a claim count when the individual "
+        "claim names are available.\n"
+        "13. Use the CLAIM STATUS BREAKDOWN section to distinguish "
+        "supported, needs-review, suspicious, and contradicted claims.\n"
+        "14. A needs-review claim means insufficient evidence, "
+        "not that the candidate is lying.\n"
+        "15. A suspicious claim must have an explicit suspicious "
+        "or high-risk status from PersonaDNA evidence.\n\n"
 
         "IMPORTANT DATE RULE:\n"
         "Do not describe a date as suspicious, future-dated, "

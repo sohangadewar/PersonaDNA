@@ -34,6 +34,9 @@ class CandidateReport(BaseModel):
     strengths: list[str]
     warnings: list[str]
 
+    claims: list[dict]
+    claim_stats: dict
+
     # ========================================================
     # GEMINI CANDIDATE INTELLIGENCE
     # ========================================================

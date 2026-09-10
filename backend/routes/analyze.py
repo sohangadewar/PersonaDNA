@@ -2,6 +2,8 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from backend.services.verifier import verify_candidate
 
+
+
 router = APIRouter()
 
 

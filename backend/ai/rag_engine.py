@@ -121,7 +121,25 @@ CLAIM_ALIASES = {
         "react.js",
     },
 }
+# ============================================================
+# CLAIM SUPPORTING TECHNOLOGIES
+# ============================================================
 
+CLAIM_SUPPORTING_TECHNOLOGIES = {
+    "ml": {
+        "scikit learn",
+        "scikit-learn",
+        "sklearn",
+    },
+
+    "data science": {
+        "pandas",
+        "numpy",
+        "scikit learn",
+        "scikit-learn",
+        "sklearn",
+    },
+}
 
 # ============================================================
 # BASIC HELPERS
@@ -158,6 +176,36 @@ def safe_confidence(value: Any) -> float:
 
     except (TypeError, ValueError):
         return 0.0
+
+    # ============================================================
+# SUPPORTING TECHNOLOGIES
+# ============================================================
+
+def supporting_technologies(claim: Any) -> set[str]:
+    """
+    Return technologies that can provide supporting evidence
+    for a higher-level claim.
+
+    Supporting technology is NOT treated as an alias.
+    It provides evidence for the claim without redefining it.
+
+    Examples:
+        Machine Learning -> scikit-learn
+        Data Science -> pandas, numpy, scikit-learn
+    """
+
+    canonical = canonical_claim(claim)
+
+    technologies = CLAIM_SUPPORTING_TECHNOLOGIES.get(
+        canonical,
+        set(),
+    )
+
+    return {
+        normalize_text(technology)
+        for technology in technologies
+        if normalize_text(technology)
+    }
 
 
 # ============================================================
@@ -626,6 +674,7 @@ def extract_linkedin_text(
         "skills",
         "experience",
         "education",
+        "certifications",
     ]:
 
         values = linkedin_evidence.get(
@@ -732,6 +781,18 @@ def find_github_structured_evidence(
                     ):
                         evidence_types.add(
                             "technology"
+                        )
+                        continue
+
+                    normalized_technology = normalize_text(
+                        technology
+                    )
+
+                    if normalized_technology in supporting_technologies(
+                        claim
+                    ):
+                        evidence_types.add(
+                            "supporting_technology"
                         )
 
             # ------------------------------------------------
@@ -845,9 +906,16 @@ def find_github_structured_evidence(
     # ========================================================
     # BUILD RESULT
     # ========================================================
+    evidence_type_labels = {
+        "technology": "technology",
+        "supporting_technology": "supporting technology",
+        "language": "primary language",
+        "languages": "language statistics",
+        "topic": "topic",
+}
 
     if (
-        matched_repositories
+            matched_repositories
         or global_evidence_types
     ):
 
@@ -861,7 +929,13 @@ def find_github_structured_evidence(
                     f"'{repository['name']}' "
                     f"contains evidence for "
                     f"'{claim}' through "
-                    f"{', '.join(repository['evidence_types'])}."
+                    f"{', '.join(
+    evidence_type_labels.get(
+        evidence_type,
+        evidence_type,
+    )
+    for evidence_type in repository["evidence_types"]
+)}."
                 )
             )
 
@@ -986,12 +1060,23 @@ def verify_claim_with_rag(
     # 2. GITHUB
     # ========================================================
 
+    print(
+        "DEBUG ML SUPPORT:",
+        claim_text,
+        supporting_technologies(claim_text),
+    )
+
     github_structured = (
         find_github_structured_evidence(
             claim=claim_text,
             github_evidence=github_evidence,
         )
     )
+    print(
+        "DEBUG GITHUB STRUCTURED:",
+        claim_text,
+    repr(github_structured),
+)
 
     if github_structured.get(
         "matched",

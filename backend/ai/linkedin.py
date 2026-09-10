@@ -2,11 +2,175 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import RedirectResponse
+
+from backend.ai.linkedin_oauth import (
+    build_linkedin_authorization_url,
+    exchange_code_for_token,
+    fetch_authorized_linkedin_data,
+    create_oauth_result,
+    validate_oauth_state,
+    consume_oauth_result,
+)
+
+router = APIRouter(
+    prefix="/linkedin",
+    tags=["LinkedIn"],
+)
 
 # ============================================================
 # Helpers
 # ============================================================
+# ============================================================
+# LinkedIn OAuth Routes
+# ============================================================
 
+@router.get("/connect")
+async def linkedin_connect():
+    """
+    Start the LinkedIn OAuth authorization flow.
+    """
+
+    try:
+        authorization_url, _ = (
+            build_linkedin_authorization_url()
+        )
+
+        return RedirectResponse(
+            url=authorization_url
+        )
+
+    except Exception as exc:
+        print(
+            "LinkedIn connect error:",
+            repr(exc),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start LinkedIn authorization.",
+        ) from exc
+
+
+@router.get("/callback")
+async def linkedin_callback(
+    code: str = "",
+    state: str = "",
+    error: str = "",
+):
+    """
+    Handle the callback from LinkedIn after authorization.
+    """
+
+    if error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"LinkedIn authorization failed: {error}",
+        )
+
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="LinkedIn authorization code is missing.",
+        )
+
+    if not validate_oauth_state(state):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired LinkedIn OAuth state.",
+        )
+
+    try:
+        # ----------------------------------------------------
+        # Exchange authorization code for access token
+        # ----------------------------------------------------
+
+        token_data = exchange_code_for_token(code)
+
+        access_token = token_data.get(
+            "access_token",
+            "",
+        )
+
+        if not access_token:
+            raise RuntimeError(
+                "LinkedIn access token was not returned."
+            )
+
+        # ----------------------------------------------------
+        # Fetch authorized LinkedIn data
+        # ----------------------------------------------------
+
+        linkedin_data = (
+            fetch_authorized_linkedin_data(
+                access_token
+            )
+        )
+
+        # ----------------------------------------------------
+        # Store result temporarily
+        # ----------------------------------------------------
+
+        result_code = create_oauth_result(
+            linkedin_data
+        )
+
+        # ----------------------------------------------------
+        # Redirect back to frontend
+        # ----------------------------------------------------
+
+        frontend_url = (
+            "http://localhost:5173"
+            f"?linkedin_result={result_code}"
+        )
+
+        return RedirectResponse(
+            url=frontend_url
+        )
+
+    except Exception as exc:
+        print(
+            "LinkedIn callback error:",
+            repr(exc),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="LinkedIn authorization failed.",
+        ) from exc
+
+
+@router.get("/result")
+async def linkedin_result(
+    code: str = "",
+):
+    """
+    Return the temporarily stored LinkedIn result.
+    """
+
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="LinkedIn result code is missing.",
+        )
+
+    linkedin_data = consume_oauth_result(
+        code
+    )
+
+    if linkedin_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "LinkedIn result not found "
+                "or already consumed."
+            ),
+        )
+
+    return {
+        "linkedin": linkedin_data
+    }
 def normalize_text(value: Any) -> str:
     return str(value or "").strip().lower()
 

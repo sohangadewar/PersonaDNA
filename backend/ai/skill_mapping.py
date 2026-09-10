@@ -34,6 +34,10 @@ def normalize_skill(skill: str) -> str:
 
         "google cloud": "google cloud",
         "gcp": "google cloud",
+
+         "github": "git",
+
+         "google cloud platform": "google cloud",
     }
 
     return aliases.get(skill, skill)

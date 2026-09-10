@@ -305,6 +305,52 @@ def process_jarvis_command(
         )
 
     # ========================================================
+    # CANDIDATE OVERVIEW
+    # ========================================================
+
+    if (
+        "tell me about the candidate" in command
+        or "about the candidate" in command
+        or "candidate overview" in command
+        or "give me an overview of the candidate" in command
+    ):
+
+        trust_score = analysis_result.get(
+            "trust_score",
+            0
+        )
+
+        ai_confidence = analysis_result.get(
+            "ai_confidence",
+            0
+        )
+
+        verified_claims = analysis_result.get(
+            "verified_claims",
+            0
+        )
+
+        risk_level = analysis_result.get(
+            "risk_level",
+            "unknown"
+        )
+
+        recruiter_verdict = analysis_result.get(
+            "recruiter_verdict",
+            "unknown"
+        )
+
+        return (
+            f"The candidate has a trust score of "
+            f"{trust_score}, with an AI confidence of "
+            f"{ai_confidence} percent and "
+            f"{verified_claims} verified claims. "
+            f"The current risk level is {risk_level}. "
+            f"The recruiter verdict is "
+            f"{recruiter_verdict}."
+        )
+
+    # ========================================================
     # HELP
     # ========================================================
 
@@ -341,11 +387,8 @@ def process_jarvis_command(
     # ========================================================
 
     return (
-        "I could not find that information in the "
-        "candidate analysis. You can ask about the "
-        "trust score, AI confidence, verified claims, "
-        "risk level, recruiter verdict, skills, "
-        "or projects."
+            "I don’t have that information. Try asking about trust, risk, skills, projects, or verification."
+
     )
 
 

@@ -188,6 +188,22 @@ def calculate_trust_score(
     breakdown["rag_verification"] = round(
         rag_score
     )
+    confidence_values = []
+
+    for claim in rag_claims:
+        confidence = safe_confidence(
+            claim.get("rag_confidence", 0)
+        )
+
+        if confidence > 0:
+            confidence_values.append(confidence)
+
+    if confidence_values:
+        ai_confidence = round(
+            sum(confidence_values) / len(confidence_values)
+        )
+    else:
+        ai_confidence = 0
 
     # ========================================================
     # 3. IDENTITY VERIFICATION — 20
@@ -355,7 +371,7 @@ def calculate_trust_score(
         linkedin_score
     )
 
-       # ========================================================
+    # ========================================================
     # 6. TOTAL SCORE
     #
     # IMPORTANT:
@@ -460,6 +476,7 @@ def calculate_trust_score(
 
     return {
         "trust_score": trust_score,
+        "ai_confidence": ai_confidence,
         "risk_level": risk_level,
         "recruiter_verdict": recruiter_verdict,
         "score_breakdown": breakdown,
