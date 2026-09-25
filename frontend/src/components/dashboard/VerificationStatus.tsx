@@ -14,11 +14,7 @@ interface VerificationStatusProps {
 
 type Status = "verified" | "warning" | "mismatch";
 
-function StatusBadge({
-  status,
-}: {
-  status: Status;
-}) {
+function StatusBadge({ status }: { status: Status }) {
   if (status === "verified") {
     return (
       <span className="flex items-center gap-2 rounded-full bg-green-500/10 px-3 py-1 text-sm font-medium text-green-400">
@@ -48,50 +44,54 @@ function StatusBadge({
 export default function VerificationStatus({
   report,
 }: VerificationStatusProps) {
- const githubMismatch = report.warnings.some((warning) =>
-  warning.toLowerCase().includes("github identity")
-);
+  // ========================================================
+  // GITHUB VERIFICATION
+  // ========================================================
 
-const linkedinMismatch = report.warnings.some((warning) =>
-  warning.toLowerCase().includes("linkedin identity")
-);
+  const githubProfileFound = report.github_evidence?.profile_found === true;
 
-const githubFound = report.strengths.some((strength) =>
-  strength.toLowerCase().includes("github profile found")
-);
+  const githubIdentityMismatch =
+    githubProfileFound && report.identity?.github_match === false;
 
-const linkedinVerified =
-  report.identity?.linkedin_match === true ||
-  report.linkedin_evidence?.authorized_source === true;
+  // ========================================================
+  // LINKEDIN VERIFICATION
+  // ========================================================
+
+  const linkedinMismatch = report.warnings.some((warning) =>
+    warning.toLowerCase().includes("linkedin identity"),
+  );
+
+  const linkedinVerified =
+    report.identity?.linkedin_match === true ||
+    report.linkedin_evidence?.authorized_source === true;
 
   return (
     <div className="mt-8 rounded-3xl bg-[#111827] p-8">
+      {/* Header */}
+
       <div>
-        <h2 className="text-2xl font-bold text-white">
-          Verification Status
-        </h2>
+        <h2 className="text-2xl font-bold text-white">Verification Status</h2>
 
         <p className="mt-2 text-sm text-gray-400">
           Source-level verification signals used in the current analysis.
         </p>
       </div>
 
-      <div className="mt-8 grid gap-5 md:grid-cols-3">
+      {/* Verification Cards */}
 
-        {/* Resume */}
+      <div className="mt-8 grid gap-5 md:grid-cols-3">
+        {/* ==================================================
+            RESUME
+        ================================================== */}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-center gap-3">
             <FileText className="text-blue-400" size={24} />
 
             <div>
-              <h3 className="font-semibold text-white">
-                Resume
-              </h3>
+              <h3 className="font-semibold text-white">Resume</h3>
 
-              <p className="text-sm text-gray-500">
-                PDF extraction
-              </p>
+              <p className="text-sm text-gray-500">PDF extraction</p>
             </div>
           </div>
 
@@ -100,29 +100,27 @@ const linkedinVerified =
           </div>
         </div>
 
-        {/* GitHub */}
+        {/* ==================================================
+            GITHUB
+        ================================================== */}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-center gap-3">
             <Globe className="text-gray-300" size={24} />
 
             <div>
-              <h3 className="font-semibold text-white">
-                GitHub
-              </h3>
+              <h3 className="font-semibold text-white">GitHub</h3>
 
-              <p className="text-sm text-gray-500">
-                Profile + repositories
-              </p>
+              <p className="text-sm text-gray-500">Profile + repositories</p>
             </div>
           </div>
 
           <div className="mt-5">
             <StatusBadge
               status={
-                githubMismatch
+                githubIdentityMismatch
                   ? "mismatch"
-                  : githubFound
+                  : githubProfileFound
                     ? "verified"
                     : "warning"
               }
@@ -130,20 +128,18 @@ const linkedinVerified =
           </div>
         </div>
 
-        {/* LinkedIn */}
+        {/* ==================================================
+            LINKEDIN
+        ================================================== */}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-center gap-3">
             <User className="text-sky-400" size={24} />
 
             <div>
-              <h3 className="font-semibold text-white">
-                LinkedIn
-              </h3>
+              <h3 className="font-semibold text-white">LinkedIn</h3>
 
-              <p className="text-sm text-gray-500">
-                Identity consistency
-              </p>
+              <p className="text-sm text-gray-500">Identity consistency</p>
             </div>
           </div>
 
@@ -159,7 +155,6 @@ const linkedinVerified =
             />
           </div>
         </div>
-
       </div>
     </div>
   );

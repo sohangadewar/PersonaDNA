@@ -1,4 +1,4 @@
-import { ShieldCheck, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 
@@ -6,85 +6,118 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    "Features",
-    "How it Works",
-    "Technology",
-    "Roadmap",
+    { label: "Features", id: "features" },
+    { label: "How it Works", id: "how-it-works" },
+    { label: "Technology", id: "technology" },
+    { label: "Roadmap", id: "roadmap" },
   ];
+
+  const scrollToSection = (id: string) => {
+    const section = document.getElementById(id);
+
+    if (section) {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+
+    setIsOpen(false);
+  };
+
+  const handleGenerateDNA = () => {
+    const section = document.getElementById("generate-dna");
+
+    if (section) {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+
+    setIsOpen(false);
+  };
 
   return (
     <motion.nav
       initial={{ y: -40, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#09090B]/80 backdrop-blur-xl"
+      className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-[#09090B]/85 backdrop-blur-xl"
     >
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-blue-600 p-2">
-            <ShieldCheck className="h-6 w-6 text-white" />
-          </div>
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-21">
+     
+        {/* BRAND */}
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="flex items-center"
+        >
+          <img
+            src="/personadna-navbar-logo.png"
+            alt="PersonaDNA"
+            className="h-50  w-70 object-contain"
+          />
+        </button>
 
-          <div>
-            <h1 className="text-xl font-bold text-white">
-              PersonaDNA
-            </h1>
-
-            <p className="text-xs text-blue-400">
-              Powered by EvidenceAI™
-            </p>
-          </div>
-        </div>
-
-        {/* Desktop Navigation */}
-        <div className="hidden items-center gap-10 md:flex">
+        {/* DESKTOP NAVIGATION */}
+        <div className="hidden items-center gap-9 md:flex">
           {navItems.map((item) => (
-            <a
-              key={item}
-              href="#"
-              className="text-sm text-gray-300 transition hover:text-white"
+            <button
+              key={item.id}
+              onClick={() => scrollToSection(item.id)}
+              className="text-sm font-medium text-gray-300 transition hover:text-white"
             >
-              {item}
-            </a>
+              {item.label}
+            </button>
           ))}
         </div>
 
-        {/* CTA */}
+        {/* DESKTOP CTA */}
         <div className="hidden md:block">
-          <button className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500">
+          <button
+            onClick={handleGenerateDNA}
+            className="rounded-xl bg-blue-600 px-21 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 hover:shadow-blue-500/30"
+          >
             Generate DNA
           </button>
         </div>
 
-        {/* Mobile Menu */}
+        {/* MOBILE MENU BUTTON */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="text-white md:hidden"
+          aria-label="Toggle navigation menu"
         >
-          {isOpen ? <X /> : <Menu />}
+          {isOpen ? <X size={26} /> : <Menu size={26} />}
         </button>
       </div>
 
-      {/* Mobile Drawer */}
+      {/* MOBILE DRAWER */}
       {isOpen && (
-        <div className="border-t border-white/10 bg-[#09090B] md:hidden">
-          <div className="flex flex-col gap-5 px-6 py-6">
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="border-t border-white/10 bg-[#09090B] md:hidden"
+        >
+          <div className="flex flex-col gap-2 px-6 py-6">
             {navItems.map((item) => (
-              <a
-                key={item}
-                href="#"
-                className="text-gray-300"
+              <button
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                className="rounded-lg px-3 py-3 text-left text-gray-300 transition hover:bg-white/5 hover:text-white"
               >
-                {item}
-              </a>
+                {item.label}
+              </button>
             ))}
 
-            <button className="rounded-xl bg-blue-600 py-3 text-white">
+            <button
+              onClick={handleGenerateDNA}
+              className="mt-2 rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-500"
+            >
               Generate DNA
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
     </motion.nav>
   );

@@ -1505,6 +1505,11 @@ async def verify_candidate(
         skills=skills,
         strengths=strengths,
         warnings=warnings,
+
+        identity=identity_result,
+        github_evidence=github_evidence,
+        linkedin_evidence=linkedin_evidence,
+
         claims=verified_claims,
         claim_stats=claim_stats,
         candidate_insight=candidate_insight,

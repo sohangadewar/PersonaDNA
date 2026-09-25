@@ -49,12 +49,25 @@ export default function UploadSection({
         window.location.search
       );
 
-      const resultCode =
-        params.get("linkedin_result");
+const resultCode =
+  params.get("linkedin_result");
 
-      if (!resultCode) {
-        return;
-      }
+if (!resultCode) {
+  return;
+}
+
+const processedCode = sessionStorage.getItem(
+  "linkedin_result_code"
+);
+
+if (processedCode === resultCode) {
+  return;
+}
+
+sessionStorage.setItem(
+  "linkedin_result_code",
+  resultCode
+);
 
       try {
         const response = await api.get(

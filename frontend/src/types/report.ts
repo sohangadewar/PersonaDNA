@@ -7,7 +7,7 @@ export interface ClaimEvidence {
 export interface Claim {
   claim: string;
   type: string;
-  status: "detected" | "supported" | "needs_review";
+  status: "detected" | "supported" | "needs_review"| "unsupported";
   evidence: ClaimEvidence;
 }
 

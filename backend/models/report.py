@@ -36,6 +36,14 @@ class CandidateReport(BaseModel):
 
     claims: list[dict]
     claim_stats: dict
+    
+ # ========================================================
+    # SOURCE VERIFICATION
+    # ========================================================
+
+    identity: dict
+    github_evidence: dict
+    linkedin_evidence: dict
 
     # ========================================================
     # GEMINI CANDIDATE INTELLIGENCE
